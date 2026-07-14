@@ -15,7 +15,7 @@ public class PrintQueueProcessor
     private readonly PrintFormatter   _formatter = new();
     private readonly DatabaseService  _db        = DatabaseService.Instance;
     private System.Timers.Timer?      _timer;
-    private bool                      _running;
+    private volatile bool             _running;
 
     public event Action<PrintJobResult>? JobCompleted;
 
