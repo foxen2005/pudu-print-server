@@ -1,0 +1,15 @@
+## .NET / C#
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+*.snupkg
+
+## Velopack releases
+releases/
+
+## OS
+Thumbs.db
+.DS_Store
