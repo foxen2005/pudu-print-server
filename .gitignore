@@ -13,3 +13,5 @@ releases/
 ## OS
 Thumbs.db
 .DS_Store
+publish/
+velopack-releases/
