@@ -12,6 +12,7 @@
           "Hardcodet.NotifyIcon.Wpf": "2.0.1",
           "Microsoft.Data.Sqlite": "9.0.7",
           "System.IO.Ports": "9.0.7",
+          "System.Text.Encoding.CodePages": "9.0.7",
           "Velopack": "1.2.0",
           "runtimepack.Microsoft.NETCore.App.Runtime.win-x64": "8.0.29",
           "runtimepack.Microsoft.WindowsDesktop.App.Runtime.win-x64": "8.0.29"
@@ -546,10 +547,6 @@
             "assemblyVersion": "4.0.0.0",
             "fileVersion": "8.0.2926.32403"
           },
-          "System.Text.Encoding.CodePages.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.2926.32403"
-          },
           "System.Text.Encoding.Extensions.dll": {
             "assemblyVersion": "8.0.0.0",
             "fileVersion": "8.0.2926.32403"
@@ -1037,6 +1034,14 @@
           }
         }
       },
+      "System.Text.Encoding.CodePages/9.0.7": {
+        "runtime": {
+          "runtimes/win/lib/net8.0/System.Text.Encoding.CodePages.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.725.31616"
+          }
+        }
+      },
       "Velopack/1.2.0": {
         "runtime": {
           "lib/net8.0/Velopack.dll": {
@@ -1118,6 +1123,13 @@
       "sha512": "sha512-IqnvqsPwKmMBffVpm0PtyxHDQ13b7iN7V4BL/uoQiRhsYnBMoWnX5lpEQNJFzP9SsyqqnkWbsM+z/MkQ9EhUxA==",
       "path": "system.io.ports/9.0.7",
       "hashPath": "system.io.ports.9.0.7.nupkg.sha512"
+    },
+    "System.Text.Encoding.CodePages/9.0.7": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-zKONueQNAT06iqBFSsyH+29WfwaHXoO3o2xtuTcUjUgX0k9SzPX4MpUs+/J7lcHFPnB6yHztBeAJMLVlMqbCrA==",
+      "path": "system.text.encoding.codepages/9.0.7",
+      "hashPath": "system.text.encoding.codepages.9.0.7.nupkg.sha512"
     },
     "Velopack/1.2.0": {
       "type": "package",

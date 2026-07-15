@@ -16,6 +16,8 @@ public partial class App : Application
     [STAThread]
     public static void Main()
     {
+        // Habilitar code pages heredadas (CP850) para ESC/POS en .NET 8
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         VelopackApp.Build().Run();
         _mutex = new Mutex(true, "PuduPrintServer.SingleInstance", out bool isNew);
         if (!isNew)
