@@ -80,8 +80,16 @@
             <!-- Zona -->
             <TextBlock Text="ZONA DE PRODUCCIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
             <ComboBox x:Name="CmbZona" FontSize="13" Padding="10,8" Margin="0,0,0,14"
-                      Background="#1A1A1A" Foreground="White" BorderBrush="#333"
-                      DisplayMemberPath="Nombre"/>
+                      Background="White" Foreground="Black" BorderBrush="#333"
+                      DisplayMemberPath="Nombre">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Foreground" Value="Black"/>
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="Padding" Value="8,5"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+            </ComboBox>
             <!-- Tipo -->
             <TextBlock Text="TIPO DE CONEXIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
