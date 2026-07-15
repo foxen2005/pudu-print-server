@@ -11,6 +11,7 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<string> _log = new();
     private readonly Dictionary<string, PrinterCard> _cards = new(); // zona_id → card
+    private bool _forceClose; // permite cerrar de verdad (p.ej. al cerrar sesión)
 
     public MainWindow()
     {
@@ -86,8 +87,26 @@ public partial class MainWindow : Window
         if (r == MessageBoxResult.Yes) UpdateService.Instance.ApplyAndRestart();
     }
 
+    private void BdrLogout_Click(object sender, MouseButtonEventArgs e)
+    {
+        var r = MessageBox.Show("¿Cerrar sesión? Deberás iniciar sesión de nuevo.",
+            "Cerrar sesión", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return;
+        // Diferir para que el handler termine antes de teardown de ventanas
+        Dispatcher.BeginInvoke(new Action(() =>
+            ((App)Application.Current).Logout()));
+    }
+
+    /// <summary>Cierra la ventana de verdad (omite el minimizar-a-bandeja).</summary>
+    public void ForceClose()
+    {
+        _forceClose = true;
+        Close();
+    }
+
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (_forceClose) return; // cierre real solicitado
         e.Cancel = true;
         Hide(); // Minimizar a bandeja en lugar de cerrar
     }

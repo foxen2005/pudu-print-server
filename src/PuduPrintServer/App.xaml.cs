@@ -53,6 +53,42 @@ public partial class App : Application
         new MainWindow().Show();
     }
 
+    /// <summary>
+    /// Cierra la sesión actual: limpia credenciales, detiene el procesador y
+    /// vuelve a mostrar la pantalla de login. Si el usuario cancela el login,
+    /// la aplicación se cierra.
+    /// </summary>
+    public void Logout()
+    {
+        // 1. Detener procesamiento y limpiar credenciales
+        PrintQueueProcessor.Instance.Stop();
+        UserSession.Instance.Clear();
+        DatabaseService.Instance.DeleteConfig("access_token");
+        DatabaseService.Instance.DeleteConfig("refresh_token");
+        DatabaseService.Instance.DeleteConfig("user_id");
+
+        // 2. Cerrar todas las ventanas abiertas (principal + diálogos)
+        foreach (var w in Current.Windows.OfType<Window>().ToList())
+        {
+            if (w is MainWindow mw) mw.ForceClose();
+            else if (w is not LoginWindow) w.Close();
+        }
+
+        // 3. Volver al login
+        var login = new LoginWindow();
+        if (login.ShowDialog() == true)
+        {
+            PrintQueueProcessor.Instance.Start();
+            new MainWindow().Show();
+        }
+        else
+        {
+            PrintQueueProcessor.Instance.Stop();
+            _tray?.Dispose();
+            Shutdown();
+        }
+    }
+
     private void TrayIcon_DoubleClick(object sender, RoutedEventArgs e) => AbrirVentana();
 
     private void MenuAbrir_Click(object sender, RoutedEventArgs e) => AbrirVentana();

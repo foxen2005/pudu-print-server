@@ -61,6 +61,15 @@ public class DatabaseService
         cmd.ExecuteNonQuery();
     }
 
+    public void DeleteConfig(string clave)
+    {
+        using var con = Open();
+        using var cmd = con.CreateCommand();
+        cmd.CommandText = "DELETE FROM config WHERE clave=@c";
+        cmd.Parameters.AddWithValue("@c", clave);
+        cmd.ExecuteNonQuery();
+    }
+
     public List<ImpresoraLocal> GetImpresoras()
     {
         using var con = Open();

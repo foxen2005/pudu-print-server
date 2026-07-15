@@ -89,4 +89,15 @@ public partial class ImpresoraDialog : Window
     }
 
     private void BtnCerrar_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void BtnCerrarSesion_Click(object sender, RoutedEventArgs e)
+    {
+        var r = MessageBox.Show("¿Cerrar sesión? Deberás iniciar sesión de nuevo.",
+            "Cerrar sesión", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return;
+        Close(); // cerrar este diálogo modal primero
+        // Diferir el logout hasta que el diálogo termine de cerrarse
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            ((App)Application.Current).Logout()));
+    }
 }
