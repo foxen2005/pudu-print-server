@@ -53,6 +53,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Lista de impresoras configuradas -->
@@ -79,46 +80,50 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- Formulario agregar/editar -->
-        <StackPanel Grid.Row="1" Margin="0,20,0,0">
-            <TextBlock Text="Agregar impresora USB / Bluetooth"
-                       FontSize="14" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,12"/>
-            <!-- Zona -->
-            <TextBlock Text="ZONA DE PRODUCCIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-            <ComboBox x:Name="CmbZona" FontSize="13" Padding="10,8" Margin="0,0,0,14"
-                      Background="White" Foreground="Black" BorderBrush="#333"
-                      DisplayMemberPath="Nombre"/>
-            <!-- Tipo -->
-            <TextBlock Text="TIPO DE CONEXIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                <RadioButton x:Name="RbWin" Content="Windows (USB)" GroupName="Tipo"
-                             Foreground="White" IsChecked="True" Margin="0,0,16,0"
-                             Checked="TipoConexion_Changed"/>
-                <RadioButton x:Name="RbCom" Content="COM / Serial" GroupName="Tipo"
-                             Foreground="White" Checked="TipoConexion_Changed"/>
+        <!-- Formulario agregar/editar (con scroll para no cortar contenido) -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,20,0,0">
+            <StackPanel>
+                <TextBlock Text="Agregar impresora"
+                           FontSize="14" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,12"/>
+                <!-- Zona -->
+                <TextBlock Text="ZONA DE PRODUCCIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                <ComboBox x:Name="CmbZona" FontSize="13" Padding="10,8" Margin="0,0,0,14"
+                          Background="White" Foreground="Black" BorderBrush="#333"
+                          DisplayMemberPath="Nombre"/>
+                <!-- Tipo -->
+                <TextBlock Text="TIPO DE CONEXIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                    <RadioButton x:Name="RbWin" Content="Windows (USB)" GroupName="Tipo"
+                                 Foreground="White" IsChecked="True" Margin="0,0,16,0"
+                                 Checked="TipoConexion_Changed"/>
+                    <RadioButton x:Name="RbCom" Content="COM / Serial" GroupName="Tipo"
+                                 Foreground="White" Checked="TipoConexion_Changed"/>
+                </StackPanel>
+                <!-- Impresora de Windows (tipo WIN) -->
+                <StackPanel x:Name="PanelWin">
+                    <TextBlock Text="IMPRESORA DE WINDOWS" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbImpresoraWin" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                              Background="White" Foreground="Black" BorderBrush="#333"/>
+                </StackPanel>
+                <!-- Puerto COM (tipo COM) -->
+                <StackPanel x:Name="PanelCom" Visibility="Collapsed">
+                    <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                    <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                             Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
+                </StackPanel>
             </StackPanel>
-            <!-- Impresora de Windows (tipo WIN) -->
-            <StackPanel x:Name="PanelWin">
-                <TextBlock Text="IMPRESORA DE WINDOWS" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-                <ComboBox x:Name="CmbImpresoraWin" FontSize="13" Padding="10,8" Margin="0,0,0,16"
-                          Background="White" Foreground="Black" BorderBrush="#333"/>
-            </StackPanel>
-            <!-- Puerto COM (tipo COM) -->
-            <StackPanel x:Name="PanelCom" Visibility="Collapsed">
-                <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-                <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
-                         Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
-            </StackPanel>
-            <!-- Estado -->
+        </ScrollViewer>
+
+        <!-- Estado + botón Agregar (fijo, siempre visible) -->
+        <StackPanel Grid.Row="2" Margin="0,10,0,0">
             <TextBlock x:Name="LblMsg" FontSize="11" Foreground="#888" Margin="0,0,0,8"/>
-            <!-- Agregar -->
             <Button Content="Agregar impresora" Click="BtnAgregar_Click"
                     Background="#7C3AED" Foreground="White" BorderThickness="0"
                     Padding="0,10" FontSize="13" FontWeight="Bold"/>
         </StackPanel>
 
         <!-- Cuenta / cerrar sesión + cerrar -->
-        <StackPanel Grid.Row="2" Margin="0,16,0,0">
+        <StackPanel Grid.Row="3" Margin="0,16,0,0">
             <Border Height="1" Background="#242424" Margin="0,0,0,12"/>
             <Grid>
                 <Grid.ColumnDefinitions>
