@@ -18,6 +18,7 @@ public class PrintQueueProcessor
     private volatile bool             _running;
 
     public event Action<PrintJobResult>? JobCompleted;
+    public event Action<string>? JobReceiving; // zona_id — se dispara antes de imprimir
 
     public void Start(int intervalMs = 1500)
     {
@@ -43,7 +44,7 @@ public class PrintQueueProcessor
 
     private async Task ProcessJobAsync(ColaImpresionJob job)
     {
-        // Marcar procesando (atómico: solo si sigue pendiente)
+        JobReceiving?.Invoke(job.ZonaId);
         await _supa.PatchEstadoAsync(job.Id, "procesando");
         try
         {

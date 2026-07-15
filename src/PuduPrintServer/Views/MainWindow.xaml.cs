@@ -24,6 +24,8 @@ public partial class MainWindow : Window
             BdrActualizar.Visibility = Visibility.Visible;
         CargarTarjetas();
         PrintQueueProcessor.Instance.JobCompleted += OnJobCompleted;
+        PrintQueueProcessor.Instance.JobReceiving += NotifyReceiving;
+        Closed += (_, _) => PrintQueueProcessor.Instance.JobCompleted -= OnJobCompleted;
     }
 
     private void CargarTarjetas()
@@ -68,7 +70,7 @@ public partial class MainWindow : Window
         });
     }
 
-    public void RefreshCards() => CargarTarjetas();
+    public void RefreshCards() => Dispatcher.Invoke(CargarTarjetas);
 
     private void BdrConfig_Click(object sender, MouseButtonEventArgs e)
     {

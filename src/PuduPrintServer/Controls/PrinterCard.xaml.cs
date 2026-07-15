@@ -10,6 +10,7 @@ public enum PrinterState { Idle, Receiving, Printing, Error }
 public partial class PrinterCard : System.Windows.Controls.UserControl
 {
     private int _jobCount;
+    private CancellationTokenSource? _idleCts;
 
     public PrinterCard() => InitializeComponent();
 
@@ -30,6 +31,8 @@ public partial class PrinterCard : System.Windows.Controls.UserControl
 
     public void SetState(PrinterState state)
     {
+        _idleCts?.Cancel();
+        _idleCts = null;
         StopAllAnimations();
         switch (state)
         {
@@ -64,9 +67,13 @@ public partial class PrinterCard : System.Windows.Controls.UserControl
     {
         if (ok) _jobCount++;
         LblJobs.Text = _jobCount > 0 ? $"{_jobCount} impresos" : "";
-        // Volver a idle tras 2 segundos
-        Task.Delay(2000).ContinueWith(_ =>
-            Dispatcher.Invoke(() => SetState(ok ? PrinterState.Idle : PrinterState.Error)));
+        var cts = new CancellationTokenSource();
+        _idleCts = cts;
+        Task.Delay(2000, cts.Token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Dispatcher.Invoke(() => SetState(ok ? PrinterState.Idle : PrinterState.Error));
+        }, TaskScheduler.Default);
     }
 
     private void StopAllAnimations()
