@@ -20,6 +20,11 @@ public class PrinterService
         });
     }
 
+    /// <summary>Envía a una impresora instalada en Windows (spooler) por nombre — RAW ESC/POS.
+    /// Sirve para impresoras USB en puertos de spooler (USB001, USB002...).</summary>
+    public Task PrintSpoolerAsync(byte[] data, string printerName)
+        => Task.Run(() => RawPrinterHelper.SendBytes(printerName, data));
+
     /// <summary>Envía a impresora IP via TCP (puerto 9100).</summary>
     public async Task PrintIpAsync(byte[] data, string ip, int puerto = 9100)
     {
@@ -43,6 +48,22 @@ public class PrinterService
             EscPos.Feed(3), EscPos.Cut()
         );
         await PrintComAsync(bytes, portName);
+    }
+
+    /// <summary>Imprime ticket de prueba a una impresora de Windows (spooler).</summary>
+    public async Task PrintPruebaSpoolerAsync(string printerName)
+    {
+        var bytes = EscPos.Concat(
+            EscPos.Initialize(),
+            EscPos.Center(), EscPos.BoldOn(),
+            EscPos.Line("PUDU PRINT SERVER"),
+            EscPos.BoldOff(),
+            EscPos.Line("Prueba de conexion OK"),
+            EscPos.Line(printerName),
+            EscPos.Line(DateTime.Now.ToString("dd/MM/yyyy HH:mm")),
+            EscPos.Feed(3), EscPos.Cut()
+        );
+        await PrintSpoolerAsync(bytes, printerName);
     }
 
     /// <summary>Imprime ticket de prueba a IP.</summary>

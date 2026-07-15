@@ -41,6 +41,12 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Items de los desplegables: texto negro legible sobre fondo claro -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="8,5"/>
+        </Style>
     </Window.Resources>
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -59,7 +65,7 @@
                     <GridView>
                         <GridViewColumn Header="Zona" Width="120" DisplayMemberBinding="{Binding ZonaNombre}"/>
                         <GridViewColumn Header="Tipo" Width="60"  DisplayMemberBinding="{Binding TipoConexion}"/>
-                        <GridViewColumn Header="Puerto COM" Width="100" DisplayMemberBinding="{Binding PuertoCom}"/>
+                        <GridViewColumn Header="Impresora / Puerto" Width="240" DisplayMemberBinding="{Binding Destino}"/>
                     </GridView>
                 </ListView.View>
             </ListView>
@@ -81,27 +87,28 @@
             <TextBlock Text="ZONA DE PRODUCCIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
             <ComboBox x:Name="CmbZona" FontSize="13" Padding="10,8" Margin="0,0,0,14"
                       Background="White" Foreground="Black" BorderBrush="#333"
-                      DisplayMemberPath="Nombre">
-                <ComboBox.ItemContainerStyle>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="Black"/>
-                        <Setter Property="Background" Value="White"/>
-                        <Setter Property="Padding" Value="8,5"/>
-                    </Style>
-                </ComboBox.ItemContainerStyle>
-            </ComboBox>
+                      DisplayMemberPath="Nombre"/>
             <!-- Tipo -->
             <TextBlock Text="TIPO DE CONEXIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                <RadioButton x:Name="RbUsb" Content="USB" GroupName="Tipo"
-                             Foreground="White" IsChecked="True" Margin="0,0,16,0"/>
-                <RadioButton x:Name="RbBt"  Content="Bluetooth" GroupName="Tipo"
-                             Foreground="White"/>
+                <RadioButton x:Name="RbWin" Content="Windows (USB)" GroupName="Tipo"
+                             Foreground="White" IsChecked="True" Margin="0,0,16,0"
+                             Checked="TipoConexion_Changed"/>
+                <RadioButton x:Name="RbCom" Content="COM / Serial" GroupName="Tipo"
+                             Foreground="White" Checked="TipoConexion_Changed"/>
             </StackPanel>
-            <!-- Puerto COM -->
-            <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-            <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
-                     Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
+            <!-- Impresora de Windows (tipo WIN) -->
+            <StackPanel x:Name="PanelWin">
+                <TextBlock Text="IMPRESORA DE WINDOWS" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                <ComboBox x:Name="CmbImpresoraWin" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                          Background="White" Foreground="Black" BorderBrush="#333"/>
+            </StackPanel>
+            <!-- Puerto COM (tipo COM) -->
+            <StackPanel x:Name="PanelCom" Visibility="Collapsed">
+                <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+                <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                         Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
+            </StackPanel>
             <!-- Estado -->
             <TextBlock x:Name="LblMsg" FontSize="11" Foreground="#888" Margin="0,0,0,8"/>
             <!-- Agregar -->

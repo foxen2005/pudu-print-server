@@ -64,7 +64,10 @@ public class PrintQueueProcessor
                              .FirstOrDefault(i => i.ZonaId == job.ZonaId && i.Activa);
                 if (imp == null)
                     throw new Exception($"Sin impresora configurada para zona {job.ZonaNombre ?? job.ZonaId}");
-                await _printer.PrintComAsync(bytes, imp.PuertoCom);
+                if (imp.TipoConexion == "WIN")
+                    await _printer.PrintSpoolerAsync(bytes, imp.NombreImpresora);
+                else
+                    await _printer.PrintComAsync(bytes, imp.PuertoCom);
             }
 
             await _supa.PatchEstadoAsync(job.Id, "impreso");
