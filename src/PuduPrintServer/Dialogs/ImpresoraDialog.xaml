@@ -1,7 +1,72 @@
 <Window x:Class="PuduPrintServer.Dialogs.ImpresoraDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Configuración de impresoras" Width="400" Height="300"
-        Background="#111">
-    <Grid/>
+        Title="Configuración de impresoras" Width="560" Height="600"
+        WindowStartupLocation="CenterOwner" Background="#111"
+        ResizeMode="NoResize">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Lista de impresoras configuradas -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Impresoras configuradas" FontSize="16" FontWeight="Bold"
+                       Foreground="White" Margin="0,0,0,12"/>
+            <ListView x:Name="ListImpresoras" Background="#1A1A1A" BorderBrush="#333"
+                      Foreground="White" Height="180" SelectionChanged="ListImpresoras_SelectionChanged">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Zona" Width="120" DisplayMemberBinding="{Binding ZonaNombre}"/>
+                        <GridViewColumn Header="Tipo" Width="60"  DisplayMemberBinding="{Binding TipoConexion}"/>
+                        <GridViewColumn Header="Puerto COM" Width="100" DisplayMemberBinding="{Binding PuertoCom}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right">
+                <Button Content="Eliminar" x:Name="BtnEliminar" Click="BtnEliminar_Click"
+                        Background="#7F1D1D" Foreground="White" BorderThickness="0"
+                        Padding="12,6" Margin="0,0,8,0" IsEnabled="False"/>
+                <Button Content="Probar conexión" x:Name="BtnProbar" Click="BtnProbar_Click"
+                        Background="#1E3A5F" Foreground="White" BorderThickness="0"
+                        Padding="12,6" IsEnabled="False"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Formulario agregar/editar -->
+        <StackPanel Grid.Row="1" Margin="0,20,0,0">
+            <TextBlock Text="Agregar impresora USB / Bluetooth"
+                       FontSize="14" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,12"/>
+            <!-- Zona -->
+            <TextBlock Text="ZONA DE PRODUCCIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+            <ComboBox x:Name="CmbZona" FontSize="13" Padding="10,8" Margin="0,0,0,14"
+                      Background="#1A1A1A" Foreground="White" BorderBrush="#333"
+                      DisplayMemberPath="Nombre"/>
+            <!-- Tipo -->
+            <TextBlock Text="TIPO DE CONEXIÓN" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                <RadioButton x:Name="RbUsb" Content="USB" GroupName="Tipo"
+                             Foreground="White" IsChecked="True" Margin="0,0,16,0"/>
+                <RadioButton x:Name="RbBt"  Content="Bluetooth" GroupName="Tipo"
+                             Foreground="White"/>
+            </StackPanel>
+            <!-- Puerto COM -->
+            <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
+            <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                     Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
+            <!-- Estado -->
+            <TextBlock x:Name="LblMsg" FontSize="11" Foreground="#888" Margin="0,0,0,8"/>
+            <!-- Agregar -->
+            <Button Content="Agregar impresora" Click="BtnAgregar_Click"
+                    Background="#7C3AED" Foreground="White" BorderThickness="0"
+                    Padding="0,10" FontSize="13" FontWeight="Bold"/>
+        </StackPanel>
+
+        <!-- Cerrar -->
+        <Button Grid.Row="2" Content="Cerrar" Click="BtnCerrar_Click"
+                Background="#222" Foreground="White" BorderThickness="0"
+                Padding="0,10" FontSize="13" Margin="0,16,0,0"/>
+    </Grid>
 </Window>
