@@ -8,7 +8,7 @@ public class UpdateService
     private static UpdateService? _i;
     public static UpdateService Instance => _i ??= new UpdateService();
 
-    private const string RepoUrl = "https://github.com/hildenX/pudu-print-server";
+    private const string RepoUrl = "https://github.com/foxen2005/pudu-print-server";
 
     private UpdateManager? _mgr;
     private UpdateInfo?    _updateListo;
