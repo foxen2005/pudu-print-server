@@ -1,3 +1,4 @@
+using System.IO.Ports;
 using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
@@ -21,6 +22,7 @@ public partial class ImpresoraDialog : Window
     {
         RefrescarLista();
         CargarImpresorasWindows();
+        CargarPuertosCom();
         try
         {
             _zonas = await SupabaseService.Instance.GetZonasAsync();
@@ -30,7 +32,6 @@ public partial class ImpresoraDialog : Window
         catch { LblMsg.Text = "No se pudieron cargar las zonas de Supabase."; }
     }
 
-    /// <summary>Lista las impresoras instaladas en Windows en el desplegable.</summary>
     private void CargarImpresorasWindows()
     {
         try
@@ -43,12 +44,29 @@ public partial class ImpresoraDialog : Window
                 .ToList();
             CmbImpresoraWin.ItemsSource = nombres;
             if (nombres.Count > 0) CmbImpresoraWin.SelectedIndex = 0;
+            LblContadorWin.Text = nombres.Count > 0
+                ? $"{nombres.Count} impresora(s) detectada(s)"
+                : "Sin impresoras instaladas en Windows";
         }
         catch (Exception ex)
         {
-            LblMsg.Text = "No se pudieron listar las impresoras de Windows: " + ex.Message;
+            LblContadorWin.Text = "Error al listar: " + ex.Message;
         }
     }
+
+    private void CargarPuertosCom()
+    {
+        var puertos = SerialPort.GetPortNames().OrderBy(p => p).ToList();
+        CmbCom.ItemsSource = puertos;
+        if (puertos.Count > 0) CmbCom.SelectedIndex = 0;
+        LblContadorCom.Text = puertos.Count > 0
+            ? $"{puertos.Count} puerto(s) COM detectado(s)"
+            : "Sin puertos COM disponibles";
+    }
+
+    private void BtnRefrescarWin_Click(object sender, RoutedEventArgs e) => CargarImpresorasWindows();
+
+    private void BtnRefrescarCom_Click(object sender, RoutedEventArgs e) => CargarPuertosCom();
 
     private void TipoConexion_Changed(object sender, RoutedEventArgs e)
     {
@@ -86,9 +104,9 @@ public partial class ImpresoraDialog : Window
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(TxtCom.Text))
-            { LblMsg.Text = "Ingresa el puerto COM."; return; }
-            tipo = "COM"; puerto = TxtCom.Text.Trim().ToUpper();
+            if (CmbCom.SelectedItem is not string comPort || string.IsNullOrWhiteSpace(comPort))
+            { LblMsg.Text = "Selecciona un puerto COM."; return; }
+            tipo = "COM"; puerto = comPort.Trim().ToUpper();
         }
 
         DatabaseService.Instance.GuardarImpresora(new ImpresoraLocal
@@ -101,7 +119,6 @@ public partial class ImpresoraDialog : Window
             Activa          = true
         });
         LblMsg.Text = $"Impresora para '{zona.Nombre}' agregada.";
-        TxtCom.Text = "";
         RefrescarLista();
     }
 

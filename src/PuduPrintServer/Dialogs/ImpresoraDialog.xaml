@@ -101,15 +101,33 @@
                 </StackPanel>
                 <!-- Impresora de Windows (tipo WIN) -->
                 <StackPanel x:Name="PanelWin">
-                    <TextBlock Text="IMPRESORA DE WINDOWS" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-                    <ComboBox x:Name="CmbImpresoraWin" FontSize="13" Padding="10,8" Margin="0,0,0,16"
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="IMPRESORA DE WINDOWS" FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="🔄" Click="BtnRefrescarWin_Click"
+                                Background="#2A2A2A" Padding="8,3" FontSize="11" ToolTip="Recargar lista"/>
+                    </Grid>
+                    <ComboBox x:Name="CmbImpresoraWin" FontSize="13" Padding="10,8" Margin="0,4,0,4"
                               Background="White" Foreground="Black" BorderBrush="#333"/>
+                    <TextBlock x:Name="LblContadorWin" FontSize="10" Foreground="#555" Margin="0,0,0,12"/>
                 </StackPanel>
-                <!-- Puerto COM (tipo COM) -->
+                <!-- Puerto COM (tipo COM) — auto-detectado -->
                 <StackPanel x:Name="PanelCom" Visibility="Collapsed">
-                    <TextBlock Text="PUERTO COM (ej: COM3)" FontSize="11" Foreground="#888" Margin="0,0,0,6"/>
-                    <TextBox x:Name="TxtCom" FontSize="13" Padding="10,8" Margin="0,0,0,16"
-                             Background="#1A1A1A" Foreground="White" BorderBrush="#333" BorderThickness="1"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="PUERTO COM DETECTADO" FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="🔄" Click="BtnRefrescarCom_Click"
+                                Background="#2A2A2A" Padding="8,3" FontSize="11" ToolTip="Recargar puertos"/>
+                    </Grid>
+                    <ComboBox x:Name="CmbCom" FontSize="13" Padding="10,8" Margin="0,4,0,4"
+                              Background="White" Foreground="Black" BorderBrush="#333"/>
+                    <TextBlock x:Name="LblContadorCom" FontSize="10" Foreground="#555" Margin="0,0,0,12"/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
