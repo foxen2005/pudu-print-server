@@ -11,7 +11,11 @@
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <StartupObject>PuduPrintServer.App</StartupObject>
+    <ApplicationIcon>Assets\pudu-logo.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\pudu-logo.ico" />
+  </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
