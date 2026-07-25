@@ -17,20 +17,15 @@
     <Resource Include="Assets\pudu-logo.ico" />
   </ItemGroup>
   <ItemGroup>
-    <!-- SumatraPDF portátil para imprimir los tickets de caja (PDF con TED). Ver tools/README.md.
-         Condition Exists: el build no falla si el binario aún no fue colocado. -->
-    <None Include="..\..\tools\SumatraPDF.exe" Condition="Exists('..\..\tools\SumatraPDF.exe')">
-      <Link>SumatraPDF.exe</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.7" />
+    <PackageReference Include="PdfiumViewer" Version="2.13.0" />
+    <PackageReference Include="PdfiumViewer.Native.x86_64.v8-xfa" Version="2018.4.8.256" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
     <PackageReference Include="System.IO.Ports" Version="9.0.7" />
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>

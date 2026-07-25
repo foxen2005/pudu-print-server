@@ -1,19 +1,14 @@
 # tools/
 
-## SumatraPDF.exe (requerido para imprimir tickets de caja)
+## Impresión de tickets de caja — sin binarios externos
 
-El agente imprime el **ticket de caja** (PDF vectorial con timbre TED que genera POS Matic)
-usando **SumatraPDF** en modo silencioso (`PdfPrinterService.cs`).
+El ticket de caja (PDF con timbre TED que genera POS Matic) se imprime **dentro del agente**
+usando **PdfiumViewer** (`Services/PdfPrinterService.cs`): renderiza el PDF y lo imprime por GDI
+al driver de Windows de la impresora. El motor nativo `pdfium.dll` llega vía NuGet
+(`PdfiumViewer.Native.x86_64.v8-xfa`) — **no hace falta colocar ningún .exe acá**.
 
-Hay que colocar acá el ejecutable portátil:
-
-1. Descargar **SumatraPDF** (versión *portable*, 64-bit) de https://www.sumatrapdfreader.org/download-free-pdf-viewer
-2. Renombrar/copiar el ejecutable como **`SumatraPDF.exe`** dentro de esta carpeta (`tools/SumatraPDF.exe`).
-3. El `.csproj` lo copia automáticamente junto al ejecutable del agente al compilar (queda en
-   `AppContext.BaseDirectory`, que es donde `PdfPrinterService` lo busca).
-
-Si el archivo no está, el agente compila igual, pero al intentar imprimir un ticket devolverá
-`No se encontró SumatraPDF.exe...`.
-
-**Licencia:** SumatraPDF es GPLv3. Se distribuye el binario sin modificar (no se linkea), lo cual
-es compatible; incluir la atribución correspondiente en el instalador/About.
+> **Nota histórica:** se probó SumatraPDF (`SumatraPDF.exe`), pero su print silencioso
+> (`-print-to -silent`) no genera trabajo de spool en varios drivers térmicos (verificado en
+> POS-80C: el visor abre, pero no imprime). Se descartó a favor de PdfiumViewer (impresión GDI,
+> que sí funciona en esos drivers). El `.gitignore` de esta carpeta ignora cualquier `*.exe`
+> residual de esa prueba.
