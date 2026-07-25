@@ -113,6 +113,12 @@ public class LocalHttpServer
                 return;
             }
 
+            if (req.HttpMethod == "POST" && path == "/cajon")
+            {
+                await HandleCajonAsync(req, res);
+                return;
+            }
+
             await WriteJson(res, 404, new { ok = false, error = "ruta no encontrada" });
         }
         catch (Exception ex)
@@ -149,8 +155,7 @@ public class LocalHttpServer
         if (string.IsNullOrWhiteSpace(impresora))
         { await WriteJson(res, 400, new { ok = false, error = "Sin impresora de ticket (envía 'impresora' o configúrala en el agente)" }); return; }
 
-        // SumatraPDF devuelve exit 0 aunque la impresora no exista (no imprime nada). Por eso
-        // validamos que exista de antemano — así un nombre viejo/erróneo da error detectable.
+        // Validar que la impresora exista de antemano → un nombre viejo/erróneo da error detectable.
         if (!ImpresoraExiste(impresora))
         { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
 
@@ -160,8 +165,8 @@ public class LocalHttpServer
 
         await _pdf.PrintPdfAsync(pdf, impresora);
 
-        // Cajón monedero: SumatraPDF imprime un PDF y no envía el pulso de apertura, así que
-        // lo mandamos aparte por RAW a la misma impresora (best-effort, no falla la venta).
+        // Cajón monedero: imprimir el PDF no envía el pulso de apertura, así que lo mandamos
+        // aparte por RAW a la misma impresora (best-effort, no falla la venta).
         if (payload.AbrirCajon)
         {
             try { RawPrinterHelper.SendBytes(impresora, CashDrawerCmd); }
@@ -169,6 +174,29 @@ public class LocalHttpServer
         }
 
         Log?.Invoke($"Ticket impreso en '{impresora}' ({pdf.Length} bytes)");
+        await WriteJson(res, 200, new { ok = true });
+    }
+
+    /// <summary>Abre el cajón monedero on-demand (botón manual en el POS) enviando el pulso RAW.</summary>
+    private async Task HandleCajonAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+        var body = await reader.ReadToEndAsync();
+
+        CajonRequest? payload;
+        try { payload = JsonSerializer.Deserialize<CajonRequest>(body, JsonOpts); }
+        catch { payload = null; } // body vacío u opcional → usa la config local
+
+        var impresora = !string.IsNullOrWhiteSpace(payload?.Impresora)
+            ? payload!.Impresora!
+            : _db.GetConfig("impresora_ticket");
+        if (string.IsNullOrWhiteSpace(impresora))
+        { await WriteJson(res, 400, new { ok = false, error = "Sin impresora (envía 'impresora' o configúrala en el agente)" }); return; }
+        if (!ImpresoraExiste(impresora))
+        { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
+
+        RawPrinterHelper.SendBytes(impresora, CashDrawerCmd);
+        Log?.Invoke($"Cajón abierto en '{impresora}'");
         await WriteJson(res, 200, new { ok = true });
     }
 
@@ -229,5 +257,10 @@ public class LocalHttpServer
         public string? PdfBase64 { get; set; }
         public string? Impresora { get; set; }
         public bool    AbrirCajon { get; set; }
+    }
+
+    private class CajonRequest
+    {
+        public string? Impresora { get; set; }
     }
 }
