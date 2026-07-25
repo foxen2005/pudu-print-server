@@ -149,6 +149,11 @@ public class LocalHttpServer
         if (string.IsNullOrWhiteSpace(impresora))
         { await WriteJson(res, 400, new { ok = false, error = "Sin impresora de ticket (envía 'impresora' o configúrala en el agente)" }); return; }
 
+        // SumatraPDF devuelve exit 0 aunque la impresora no exista (no imprime nada). Por eso
+        // validamos que exista de antemano — así un nombre viejo/erróneo da error detectable.
+        if (!ImpresoraExiste(impresora))
+        { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
+
         byte[] pdf;
         try { pdf = Convert.FromBase64String(payload.PdfBase64); }
         catch { await WriteJson(res, 400, new { ok = false, error = "pdfBase64 no es base64 válido" }); return; }
@@ -205,6 +210,9 @@ public class LocalHttpServer
             .OrderBy(n => n)
             .ToList();
     }
+
+    private static bool ImpresoraExiste(string nombre)
+        => ListarImpresoras().Any(n => string.Equals(n, nombre, StringComparison.OrdinalIgnoreCase));
 
     private static async Task WriteJson(HttpListenerResponse res, int status, object body)
     {

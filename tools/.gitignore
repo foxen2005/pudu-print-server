@@ -1,0 +1,3 @@
+# Binarios de SumatraPDF: no se commitean (cada máquina los coloca según README.md).
+*.exe
+_sumatra/
