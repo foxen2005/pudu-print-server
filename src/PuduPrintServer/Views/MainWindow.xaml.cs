@@ -27,7 +27,22 @@ public partial class MainWindow : Window
         PrintQueueProcessor.Instance.JobCompleted += OnJobCompleted;
         PrintQueueProcessor.Instance.JobReceiving += NotifyReceiving;
         Closed += (_, _) => PrintQueueProcessor.Instance.JobCompleted -= OnJobCompleted;
+
+        // Servidor HTTP local (tickets de caja): estado en el header + logs en Actividad reciente.
+        var http = ((App)Application.Current).HttpServer;
+        if (http is { IsRunning: true })
+        {
+            LblStatus.Text = $"● Activo · impresión local :{http.Port}";
+            http.Log += OnHttpLog;
+            Closed += (_, _) => http.Log -= OnHttpLog;
+        }
     }
+
+    private void OnHttpLog(string msg) => Dispatcher.Invoke(() =>
+    {
+        _log.Insert(0, $"{DateTime.Now:HH:mm}  {"local",-12}  {msg}");
+        if (_log.Count > 20) _log.RemoveAt(20);
+    });
 
     private void CargarTarjetas()
     {

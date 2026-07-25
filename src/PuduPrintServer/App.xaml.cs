@@ -12,6 +12,10 @@ public partial class App : Application
 {
     private static Mutex? _mutex;
     private TaskbarIcon?  _tray;
+    private LocalHttpServer? _httpServer;
+
+    /// <summary>Servidor HTTP local para tickets de caja (accesible mientras la app corre).</summary>
+    public LocalHttpServer? HttpServer => _httpServer;
 
     [STAThread]
     public static void Main()
@@ -37,6 +41,19 @@ public partial class App : Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         _tray = (TaskbarIcon)FindResource("TrayIcon");
+
+        // Servidor HTTP local para el ticket de caja. No depende del login de Supabase
+        // (el PDF viaja en el request), por eso arranca antes del gate de sesión.
+        try
+        {
+            _httpServer = new LocalHttpServer();
+            _httpServer.Start();
+        }
+        catch (Exception ex)
+        {
+            // No bloquear el arranque del agente si el puerto está ocupado, etc.
+            System.Diagnostics.Debug.WriteLine($"[LocalHttpServer] no se pudo iniciar: {ex.Message}");
+        }
 
         // Intentar restaurar sesión
         var auth = new AuthService();
@@ -98,6 +115,7 @@ public partial class App : Application
     private void MenuSalir_Click(object sender, RoutedEventArgs e)
     {
         PrintQueueProcessor.Instance.Stop();
+        _httpServer?.Stop();
         _tray?.Dispose();
         Shutdown();
     }
