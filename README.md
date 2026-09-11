@@ -1,10 +1,15 @@
 # 🖨️ Pudu Print Server
 
-Aplicación de escritorio para Windows que actúa como **servidor de impresión** para el ecosistema PUDU (sistema de gestión de restaurantes). Escucha la cola de impresión en Supabase y reenvía los trabajos a impresoras térmicas locales (USB/Bluetooth vía puerto COM) o de red (TCP/IP).
+Aplicación de escritorio para Windows que actúa como **agente de impresión** para el ecosistema PUDU (sistema de gestión de restaurantes). Tiene dos caminos independientes:
+
+1. **Comandas a cocina** — escucha la cola de impresión en Supabase y reenvía los trabajos en ESC/POS a impresoras térmicas locales (USB/Bluetooth vía COM o spooler de Windows) o de red (TCP/IP).
+2. **Ticket de caja (PDF con timbre TED)** — servidor HTTP en loopback (`127.0.0.1:21777`) al que el POS, corriendo en la misma PC, le envía el PDF ya generado; el agente lo imprime silenciosamente por el driver de Windows.
 
 ---
 
 ## ¿Cómo funciona?
+
+### Camino 1 — Comandas (cola en Supabase)
 
 ```
 POS Matic (tablet/PC en el local)
@@ -14,10 +19,10 @@ POS Matic (tablet/PC en el local)
 cola_impresion (Supabase DB)  ◄──── Pudu Print Server (este programa)
                                          │  polling cada 1.5 s
                                          │
-                              ┌──────────┴──────────┐
-                              ▼                      ▼
-                    Impresora de red (IP)    Impresora USB/BT (COM)
-                    TCP port 9100            SerialPort
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+          Impresora de red (IP)   Impresora USB/BT (COM)   Spooler Windows
+          TCP port 9100           SerialPort               RAW (RawPrinterHelper)
 ```
 
 1. **Login**: El usuario inicia sesión con su cuenta PUDU (Supabase Auth). El token se guarda localmente en SQLite para auto-login al reiniciar.
@@ -25,9 +30,32 @@ cola_impresion (Supabase DB)  ◄──── Pudu Print Server (este programa)
 3. **Procesamiento**: Por cada job:
    - Cambia estado → `procesando`
    - Formatea la comanda en ESC/POS
-   - Envía bytes a la impresora (IP o COM)
+   - Envía bytes a la impresora (IP, COM o spooler)
    - Cambia estado → `impreso` o `error`
 4. **Actualización automática**: Velopack verifica actualizaciones al iniciar.
+
+### Camino 2 — Ticket de caja (HTTP local, misma PC)
+
+```
+POS Matic (Chrome, https://pudusystem.com)  ──►  http://127.0.0.1:21777  (este programa)
+   genera el PDF con TED                            │ PdfiumViewer → GDI → driver Windows
+   POST /imprimir { pdfBase64, impresora }          ▼
+                                             Impresora térmica USB (ej. 3nStar, POS-80C)
+```
+
+- **No requiere login** ni Supabase: el PDF viaja en el request. Funciona apenas arranca el agente.
+- Binding solo a `127.0.0.1` → sin permisos de admin, sin `urlacl`, sin firewall.
+- **CORS restringido** a `*.pudusystem.com`, `*.pudutecnologia.cl` y `localhost`. Responde `Access-Control-Allow-Private-Network: true` para que Chrome permita la llamada HTTPS → loopback (Private Network Access).
+- Puerto configurable en SQLite (`config.http_port`); impresora por defecto en `config.impresora_ticket` (el POS normalmente la envía en el request).
+
+| Método | Ruta | Body | Respuesta |
+|---|---|---|---|
+| `GET` | `/health` | — | `{ ok, servicio, puerto }` — detección del agente |
+| `GET` | `/impresoras` | — | `{ ok, impresoras: string[] }` — impresoras de Windows |
+| `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }` |
+| `POST` | `/cajon` | `{ impresora? }` | abre el cajón monedero (pulso ESC/POS por RAW) |
+
+> **Nota histórica:** se probó SumatraPDF para el PDF silencioso y se descartó — su `-print-to -silent` no genera trabajo de spool en varios drivers térmicos (verificado en POS-80C). Ver `tools/README.md`.
 
 ---
 
@@ -83,9 +111,12 @@ pudu-print-server/
 │       │   ├── AuthService.cs          # Login y refresh de sesión con Supabase Auth
 │       │   ├── SupabaseService.cs      # Consultas REST a cola_impresion y zonas_produccion
 │       │   ├── PrintQueueProcessor.cs  # Loop de polling y despacho de trabajos
-│       │   ├── PrinterService.cs       # Envío a impresora IP (TCP) o COM (USB/BT)
+│       │   ├── PrinterService.cs       # Envío a impresora IP (TCP), COM (USB/BT) o spooler
+│       │   ├── RawPrinterHelper.cs     # Envío RAW al spooler de Windows (winspool)
 │       │   ├── PrintFormatter.cs       # Formateo de comanda en ESC/POS
 │       │   ├── EscPos.cs               # Comandos ESC/POS primitivos
+│       │   ├── LocalHttpServer.cs      # HTTP loopback 127.0.0.1:21777 (/health /impresoras /imprimir /cajon)
+│       │   ├── PdfPrinterService.cs    # Imprime PDF con PdfiumViewer (GDI) al driver de Windows
 │       │   ├── DatabaseService.cs      # SQLite local (config + impresoras registradas)
 │       │   ├── UserSession.cs          # Sesión en memoria (singleton)
 │       │   └── UpdateService.cs        # Auto-actualización vía Velopack
@@ -98,6 +129,7 @@ pudu-print-server/
 ├── docs/
 │   ├── plans/                          # Planes de desarrollo
 │   └── specs/                          # Especificaciones técnicas
+├── tools/                              # (vacío) nota sobre SumatraPDF descartado
 ├── publish/                            # Artefactos de publicación (ignorados por git)
 └── velopack-releases/                  # Releases de Velopack
 ```
@@ -110,6 +142,9 @@ pudu-print-server/
 |---|---|---|
 | `Hardcodet.NotifyIcon.Wpf` | 2.0.1 | Ícono en la bandeja del sistema (system tray) |
 | `Microsoft.Data.Sqlite` | 9.0.7 | Base de datos local para config e impresoras |
+| `PdfiumViewer` | 2.13.0 | Render e impresión GDI del PDF del ticket de caja |
+| `PdfiumViewer.Native.x86_64.v8-xfa` | 2018.4.8.256 | `pdfium.dll` nativo (llega por NuGet, sin binarios externos) |
+| `System.Drawing.Common` | 8.0.0 | Requerido por PdfiumViewer |
 | `System.IO.Ports` | 9.0.7 | Comunicación con impresoras USB/BT vía COM |
 | `Velopack` | 1.2.0 | Auto-actualización de la aplicación |
 
@@ -125,7 +160,8 @@ C:\Users\<usuario>\pudu-print-server\print-server.db
 Tablas:
 
 ```sql
--- Configuración general (tokens de sesión, nombre del negocio)
+-- Configuración general (tokens de sesión, nombre del negocio,
+-- http_port e impresora_ticket para el servidor HTTP local)
 CREATE TABLE config (
     clave TEXT PRIMARY KEY,
     valor TEXT NOT NULL
@@ -179,3 +215,4 @@ gh release create v1.0.0 ./velopack-releases/* --title "v1.0.0"
 - **Sin variables de entorno**: La config de Supabase está hardcodeada. Si se cambia el proyecto Supabase, actualizar `AuthService.cs` y `SupabaseService.cs`.
 - **Impresoras IP**: La IP y puerto de la impresora vienen directamente en el job de `cola_impresion` (copiados por POS Matic desde `zonas_produccion`).
 - **Impresoras USB/BT**: Se configuran manualmente en la app y se guardan en SQLite local.
+- **Ticket de caja**: No pasa por Supabase. El POS lo manda por HTTP a `127.0.0.1:21777`; si el agente no corre, el POS cae al diálogo de impresión del navegador. Cliente en pos-matic: `src/hooks/useLocalPrintAgent.ts`.
