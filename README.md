@@ -54,6 +54,27 @@ POS Matic (Chrome, https://pudusystem.com)  ──►  http://127.0.0.1:21777  (
 | `GET` | `/impresoras` | — | `{ ok, impresoras: string[] }` — impresoras de Windows |
 | `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }` |
 | `POST` | `/cajon` | `{ impresora? }` | abre el cajón monedero (pulso ESC/POS por RAW) |
+| `POST` | `/comanda` | `{ id, zonaId, zonaNombre, mesaNumero?, garzonNombre?, pedidoId?, items, impresoraIp?, impresoraPuerto? }` | comanda a cocina **directa** (misma resolución de impresora que la cola). Idempotente por `id`: un reintento no reimprime |
+
+Desde v1.0.4 POS Matic manda las comandas por `/comanda` cuando el agente responde (switch "Comandas de cocina por el agente" en Configuración) y solo cae a `cola_impresion` si no. Así las comandas salen por la LAN **sin internet**.
+
+---
+
+## Sin conexión a Supabase
+
+El agente **no se cierra** sin internet. El header pasa a **"● No hay impresoras en línea"** (rojo) y el poll de la cola reintenta cada 5 s (1.5 s cuando está online); al recuperar la conexión vuelve a "● Activo". Mientras tanto el servidor HTTP local (`/imprimir`, `/cajon`, `/comanda`) sigue funcionando. Al arrancar sin red con sesión guardada, usa el token guardado y renueva la sesión solo cuando vuelve la conexión (si Supabase responde 401, reintenta el refresh como máximo una vez por minuto; nunca cierra sesión sola).
+
+---
+
+## Logs
+
+Un archivo de texto por día, botón **"📄 Logs"** en la ventana principal abre la carpeta:
+
+```
+%LocalAppData%\PuduPrintServer\logs\print-server-YYYY-MM-DD.txt
+```
+
+(fuera de `current\` para que sobreviva a las actualizaciones de Velopack; en dev queda en `bin\...\logs\`). Formato `fecha hora  [NIVEL]  [origen]  mensaje` con origen `app` / `auth` / `cola` / `local`. Se conservan 14 días. "Actividad reciente" en la ventana muestra las mismas líneas.
 
 > **Nota histórica:** se probó SumatraPDF para el PDF silencioso y se descartó — su `-print-to -silent` no genera trabajo de spool en varios drivers térmicos (verificado en POS-80C). Ver `tools/README.md`.
 
@@ -115,8 +136,9 @@ pudu-print-server/
 │       │   ├── RawPrinterHelper.cs     # Envío RAW al spooler de Windows (winspool)
 │       │   ├── PrintFormatter.cs       # Formateo de comanda en ESC/POS
 │       │   ├── EscPos.cs               # Comandos ESC/POS primitivos
-│       │   ├── LocalHttpServer.cs      # HTTP loopback 127.0.0.1:21777 (/health /impresoras /imprimir /cajon)
+│       │   ├── LocalHttpServer.cs      # HTTP loopback 127.0.0.1:21777 (/health /impresoras /imprimir /cajon /comanda)
 │       │   ├── PdfPrinterService.cs    # Imprime PDF con PdfiumViewer (GDI) al driver de Windows
+│       │   ├── LogService.cs           # Log a .txt diario (logs\) + alimenta "Actividad reciente"
 │       │   ├── DatabaseService.cs      # SQLite local (config + impresoras registradas)
 │       │   ├── UserSession.cs          # Sesión en memoria (singleton)
 │       │   └── UpdateService.cs        # Auto-actualización vía Velopack
