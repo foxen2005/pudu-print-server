@@ -3,6 +3,7 @@ using System.Net;
 using System.Printing;
 using System.Text;
 using System.Text.Json;
+using PuduPrintServer.Models;
 
 namespace PuduPrintServer.Services;
 
@@ -13,9 +14,11 @@ namespace PuduPrintServer.Services;
 ///   GET  http://127.0.0.1:{puerto}/health      → ¿agente vivo?
 ///   GET  http://127.0.0.1:{puerto}/impresoras  → lista de impresoras de Windows
 ///   POST http://127.0.0.1:{puerto}/imprimir    → { pdfBase64, impresora? } → imprime y responde ok/error
+///   POST http://127.0.0.1:{puerto}/cajon       → abre el cajón monedero
+///   POST http://127.0.0.1:{puerto}/comanda     → comanda a cocina directa (sin pasar por cola_impresion)
 ///
 /// Binding a 127.0.0.1 (no "+"/"*") NO requiere permisos de admin ni urlacl.
-/// No depende del login de Supabase: el PDF viaja en el request.
+/// No depende del login de Supabase ni de internet: todo viaja en el request.
 /// </summary>
 public class LocalHttpServer
 {
@@ -24,13 +27,18 @@ public class LocalHttpServer
     private readonly HttpListener      _listener = new();
     private readonly PdfPrinterService _pdf      = new();
     private readonly DatabaseService   _db       = DatabaseService.Instance;
+    private readonly LogService        _log      = LogService.Instance;
     private CancellationTokenSource?   _cts;
+
+    // Idempotencia de /comanda: el POS reintenta con el mismo id si hubo timeout → no reimprimir.
+    private readonly Queue<string>   _comandasVistasOrden = new();
+    private readonly HashSet<string> _comandasVistas      = new();
+    private const int MaxComandasVistas = 200;
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     public int  Port      { get; private set; }
     public bool IsRunning { get; private set; }
-    public event Action<string>? Log;
 
     public void Start()
     {
@@ -43,7 +51,7 @@ public class LocalHttpServer
         IsRunning = true;
         _cts = new CancellationTokenSource();
         _ = LoopAsync(_cts.Token);
-        Log?.Invoke($"Servidor local escuchando en http://127.0.0.1:{Port}");
+        _log.Info("local", $"Servidor local escuchando en http://127.0.0.1:{Port}");
     }
 
     public void Stop()
@@ -119,11 +127,17 @@ public class LocalHttpServer
                 return;
             }
 
+            if (req.HttpMethod == "POST" && path == "/comanda")
+            {
+                await HandleComandaAsync(req, res);
+                return;
+            }
+
             await WriteJson(res, 404, new { ok = false, error = "ruta no encontrada" });
         }
         catch (Exception ex)
         {
-            Log?.Invoke($"Error en request: {ex.Message}");
+            _log.Error("local", $"Error en request {req.HttpMethod} {req.Url?.AbsolutePath}", ex);
             try { await WriteJson(res, 500, new { ok = false, error = ex.Message }); } catch { /* conexión cerrada */ }
         }
     }
@@ -170,11 +184,86 @@ public class LocalHttpServer
         if (payload.AbrirCajon)
         {
             try { RawPrinterHelper.SendBytes(impresora, CashDrawerCmd); }
-            catch (Exception ex) { Log?.Invoke($"No se pudo abrir el cajón: {ex.Message}"); }
+            catch (Exception ex) { _log.Error("local", "No se pudo abrir el cajón", ex); }
         }
 
-        Log?.Invoke($"Ticket impreso en '{impresora}' ({pdf.Length} bytes)");
+        _log.Info("local", $"Ticket impreso en '{impresora}' ({pdf.Length} bytes)");
         await WriteJson(res, 200, new { ok = true });
+    }
+
+    /// <summary>
+    /// Comanda a cocina directa desde el POS (misma PC), sin pasar por cola_impresion en Supabase.
+    /// Mismos campos que la fila de la cola → reusa ColaImpresionJob + PrintFormatter + la
+    /// resolución de impresora del poll (PrintQueueProcessor.ImprimirComandaAsync).
+    /// </summary>
+    private async Task HandleComandaAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        if (req.ContentLength64 > MaxBodyBytes)
+        { await WriteJson(res, 413, new { ok = false, error = "cuerpo demasiado grande" }); return; }
+
+        using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+        var body = await reader.ReadToEndAsync();
+
+        ComandaRequest? payload;
+        try { payload = JsonSerializer.Deserialize<ComandaRequest>(body, JsonOpts); }
+        catch { await WriteJson(res, 400, new { ok = false, error = "JSON inválido" }); return; }
+
+        if (payload is null || string.IsNullOrWhiteSpace(payload.ZonaId))
+        { await WriteJson(res, 400, new { ok = false, error = "zonaId requerido" }); return; }
+        if (payload.Items is not { ValueKind: JsonValueKind.Array } || payload.Items.Value.GetArrayLength() == 0)
+        { await WriteJson(res, 400, new { ok = false, error = "items requerido (arreglo no vacío)" }); return; }
+
+        // Reintento del POS con el mismo id → ya se imprimió, responder ok sin duplicar.
+        if (!string.IsNullOrEmpty(payload.Id) && !RegistrarComanda(payload.Id))
+        {
+            _log.Warn("local", $"Comanda {payload.Id} repetida, no se reimprime");
+            await WriteJson(res, 200, new { ok = true, duplicada = true });
+            return;
+        }
+
+        var job = new ColaImpresionJob
+        {
+            Id              = payload.Id ?? Guid.NewGuid().ToString(),
+            ZonaId          = payload.ZonaId,
+            ZonaNombre      = payload.ZonaNombre,
+            MesaNumero      = payload.MesaNumero,
+            GarzonNombre    = payload.GarzonNombre,
+            PedidoId        = payload.PedidoId,
+            Items           = payload.Items,
+            ImpresoraIp     = payload.ImpresoraIp,
+            ImpresoraPuerto = payload.ImpresoraPuerto,
+            Estado          = "local",
+        };
+
+        try
+        {
+            await PrintQueueProcessor.Instance.ImprimirComandaAsync(job, "local");
+            await WriteJson(res, 200, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            // Ya quedó en el log/UI vía ImprimirComandaAsync; el POS cae a cola_impresion.
+            if (!string.IsNullOrEmpty(payload.Id)) OlvidarComanda(payload.Id); // permitir reintento real
+            await WriteJson(res, 500, new { ok = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>true si es nueva (se registra); false si ya se había visto.</summary>
+    private bool RegistrarComanda(string id)
+    {
+        lock (_comandasVistas)
+        {
+            if (!_comandasVistas.Add(id)) return false;
+            _comandasVistasOrden.Enqueue(id);
+            while (_comandasVistasOrden.Count > MaxComandasVistas)
+                _comandasVistas.Remove(_comandasVistasOrden.Dequeue());
+            return true;
+        }
+    }
+
+    private void OlvidarComanda(string id)
+    {
+        lock (_comandasVistas) _comandasVistas.Remove(id);
     }
 
     /// <summary>Abre el cajón monedero on-demand (botón manual en el POS) enviando el pulso RAW.</summary>
@@ -196,7 +285,7 @@ public class LocalHttpServer
         { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
 
         RawPrinterHelper.SendBytes(impresora, CashDrawerCmd);
-        Log?.Invoke($"Cajón abierto en '{impresora}'");
+        _log.Info("local", $"Cajón abierto en '{impresora}'");
         await WriteJson(res, 200, new { ok = true });
     }
 
@@ -262,5 +351,18 @@ public class LocalHttpServer
     private class CajonRequest
     {
         public string? Impresora { get; set; }
+    }
+
+    private class ComandaRequest
+    {
+        public string?      Id              { get; set; } // uuid del POS, para idempotencia
+        public string?      ZonaId          { get; set; }
+        public string?      ZonaNombre      { get; set; }
+        public string?      MesaNumero      { get; set; }
+        public string?      GarzonNombre    { get; set; }
+        public string?      PedidoId        { get; set; }
+        public JsonElement? Items           { get; set; } // CartItem[] tal cual va a cola_impresion
+        public string?      ImpresoraIp     { get; set; }
+        public int?         ImpresoraPuerto { get; set; }
     }
 }

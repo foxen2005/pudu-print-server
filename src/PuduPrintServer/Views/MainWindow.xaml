@@ -28,6 +28,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="🖨️" FontSize="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -46,15 +47,22 @@
                         MouseLeftButtonUp="BdrActualizar_Click" VerticalAlignment="Center">
                     <TextBlock Text="🔄 Actualizar" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                 </Border>
-                <!-- Botón configuración -->
+                <!-- Botón ver logs (abre la carpeta con los .txt) -->
                 <Border Grid.Column="3" Background="#20FFFFFF" BorderBrush="#40FFFFFF"
+                        BorderThickness="1" CornerRadius="6" Padding="12,6"
+                        Cursor="Hand" VerticalAlignment="Center" Margin="0,0,12,0"
+                        MouseLeftButtonUp="BdrLogs_Click" ToolTip="Abrir carpeta de logs">
+                    <TextBlock Text="📄 Logs" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                </Border>
+                <!-- Botón configuración -->
+                <Border Grid.Column="4" Background="#20FFFFFF" BorderBrush="#40FFFFFF"
                         BorderThickness="1" CornerRadius="6" Padding="12,6"
                         Cursor="Hand" VerticalAlignment="Center"
                         MouseLeftButtonUp="BdrConfig_Click">
                     <TextBlock Text="⚙ Config" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                 </Border>
                 <!-- Botón cerrar sesión -->
-                <Border Grid.Column="4" Background="#20FFFFFF" BorderBrush="#40FFFFFF"
+                <Border Grid.Column="5" Background="#20FFFFFF" BorderBrush="#40FFFFFF"
                         BorderThickness="1" CornerRadius="6" Padding="12,6"
                         Cursor="Hand" VerticalAlignment="Center" Margin="12,0,0,0"
                         MouseLeftButtonUp="BdrLogout_Click">

@@ -15,7 +15,8 @@ public class SupabaseService
 
     private HttpClient NewClient()
     {
-        var http = new HttpClient();
+        // Timeout corto: sin red, el default (100 s) dejaba el poll colgado y el estado no cambiaba.
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         http.DefaultRequestHeaders.Add("apikey", AnonKey);
         http.DefaultRequestHeaders.Add("Authorization", $"Bearer {UserSession.Instance.AccessToken}");
         return http;

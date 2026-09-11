@@ -24,23 +24,43 @@ public partial class MainWindow : Window
         if (UpdateService.Instance.VersionLista != null)
             BdrActualizar.Visibility = Visibility.Visible;
         CargarTarjetas();
-        PrintQueueProcessor.Instance.JobCompleted += OnJobCompleted;
-        PrintQueueProcessor.Instance.JobReceiving += NotifyReceiving;
-        Closed += (_, _) => PrintQueueProcessor.Instance.JobCompleted -= OnJobCompleted;
-
-        // Servidor HTTP local (tickets de caja): estado en el header + logs en Actividad reciente.
-        var http = ((App)Application.Current).HttpServer;
-        if (http is { IsRunning: true })
+        var proc = PrintQueueProcessor.Instance;
+        proc.JobCompleted  += OnJobCompleted;
+        proc.JobReceiving  += NotifyReceiving;
+        proc.OnlineChanged += OnOnlineChanged;
+        // "Actividad reciente" se alimenta del mismo LogService que escribe el .txt:
+        // UI y archivo muestran exactamente lo mismo.
+        LogService.Instance.Escrito += OnLogEscrito;
+        Closed += (_, _) =>
         {
-            LblStatus.Text = $"● Activo · impresión local :{http.Port}";
-            http.Log += OnHttpLog;
-            Closed += (_, _) => http.Log -= OnHttpLog;
-        }
+            proc.JobCompleted  -= OnJobCompleted;
+            proc.JobReceiving  -= NotifyReceiving;
+            proc.OnlineChanged -= OnOnlineChanged;
+            LogService.Instance.Escrito -= OnLogEscrito;
+        };
+
+        ActualizarEstado(proc.Online);
     }
 
-    private void OnHttpLog(string msg) => Dispatcher.Invoke(() =>
+    /// <summary>Header: verde "Activo" con conexión a Supabase; rojo "No hay impresoras en línea"
+    /// sin ella. El HTTP local (ticket de caja) sigue funcionando sin red, por eso se muestra igual.</summary>
+    private void ActualizarEstado(bool online)
     {
-        _log.Insert(0, $"{DateTime.Now:HH:mm}  {"local",-12}  {msg}");
+        var http  = ((App)Application.Current).HttpServer;
+        var local = http is { IsRunning: true } ? $" · impresión local :{http.Port}" : "";
+        LblStatus.Text = online
+            ? $"● Activo{local}"
+            : $"● No hay impresoras en línea{local}";
+        LblStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+            online ? System.Windows.Media.Color.FromRgb(0x34, 0xD3, 0x99)   // verde
+                   : System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71)); // rojo
+    }
+
+    private void OnOnlineChanged(bool online) => Dispatcher.Invoke(() => ActualizarEstado(online));
+
+    private void OnLogEscrito(string linea) => Dispatcher.BeginInvoke(() =>
+    {
+        _log.Insert(0, linea);
         if (_log.Count > 20) _log.RemoveAt(20);
     });
 
@@ -60,14 +80,9 @@ public partial class MainWindow : Window
 
     private void OnJobCompleted(PrintJobResult result)
     {
+        // La línea de log ya la escribió ImprimirComandaAsync vía LogService → acá solo la tarjeta.
         Dispatcher.Invoke(() =>
         {
-            var zona  = result.Job.ZonaNombre ?? result.Job.ZonaId[..Math.Min(8, result.Job.ZonaId.Length)];
-            var mesa  = result.Job.MesaNumero ?? "-";
-            var icon  = result.Ok ? "✓" : "✗";
-            var hora  = DateTime.Now.ToString("HH:mm");
-            _log.Insert(0, $"{hora}  {zona,-12}  Mesa {mesa,-6}  {icon}  {result.Error ?? "impreso"}");
-            if (_log.Count > 20) _log.RemoveAt(20);
             if (_cards.TryGetValue(result.Job.ZonaId, out var card))
             {
                 card.SetState(PrinterState.Printing);
@@ -93,6 +108,20 @@ public partial class MainWindow : Window
         var dlg = new Dialogs.ImpresoraDialog();
         dlg.ShowDialog();
         CargarTarjetas();
+    }
+
+    private void BdrLogs_Click(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{LogService.Instance.Carpeta}\"",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex) { LogService.Instance.Error("app", "No se pudo abrir la carpeta de logs", ex); }
     }
 
     private void BdrActualizar_Click(object sender, MouseButtonEventArgs e)

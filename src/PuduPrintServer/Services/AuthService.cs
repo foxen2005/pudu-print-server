@@ -30,6 +30,7 @@ public class AuthService
         DatabaseService.Instance.SetConfig("access_token",  at);
         DatabaseService.Instance.SetConfig("refresh_token", rt);
         DatabaseService.Instance.SetConfig("user_id",       uid);
+        LogService.Instance.Info("auth", $"Login OK ({email})");
         return true;
     }
 
@@ -39,19 +40,33 @@ public class AuthService
         var rt  = DatabaseService.Instance.GetConfig("refresh_token");
         var uid = DatabaseService.Instance.GetConfig("user_id");
         if (at == null || rt == null || uid == null) return false;
-        // Refresh token
-        using var http = new HttpClient();
+
+        // Sesión guardada en memoria ANTES del refresh: si no hay red, el agente arranca igual
+        // con el token viejo (el poll reintenta el refresh solo cuando vuelva la conexión).
+        UserSession.Instance.AccessToken  = at;
+        UserSession.Instance.RefreshToken = rt;
+        UserSession.Instance.UserId       = uid;
+
+        // Refresh token. Timeout corto: el default (100 s) colgaba el arranque sin red.
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         http.DefaultRequestHeaders.Add("apikey", AnonKey);
         var body = JsonSerializer.Serialize(new { refresh_token = rt });
-        var resp = await http.PostAsync(
-            $"{Url}/auth/v1/token?grant_type=refresh_token",
-            new StringContent(body, Encoding.UTF8, "application/json"));
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.PostAsync(
+                $"{Url}/auth/v1/token?grant_type=refresh_token",
+                new StringContent(body, Encoding.UTF8, "application/json"));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            LogService.Instance.Warn("auth", $"Sin red al restaurar sesión, usando token guardado — {ex.Message}");
+            return true;
+        }
         if (!resp.IsSuccessStatusCode)
         {
             // Token expirado, usar el viejo igual (puede que aún sirva)
-            UserSession.Instance.AccessToken  = at;
-            UserSession.Instance.RefreshToken = rt;
-            UserSession.Instance.UserId       = uid;
+            LogService.Instance.Warn("auth", $"Refresh de sesión rechazado ({(int)resp.StatusCode}), usando token guardado");
             return true;
         }
         var json = await resp.Content.ReadAsStringAsync();
@@ -64,6 +79,7 @@ public class AuthService
         UserSession.Instance.UserId       = uid;
         DatabaseService.Instance.SetConfig("access_token",  newAt);
         DatabaseService.Instance.SetConfig("refresh_token", newRt);
+        LogService.Instance.Info("auth", "Sesión restaurada (token renovado)");
         return true;
     }
 }

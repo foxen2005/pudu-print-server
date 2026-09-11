@@ -42,6 +42,24 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         _tray = (TaskbarIcon)FindResource("TrayIcon");
 
+        // Red de seguridad: un error inesperado se loguea y NO cierra el agente.
+        var log = LogService.Instance;
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            log.Error("app", "Excepción no controlada (UI)", ex.Exception);
+            ex.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+            log.Error("app", "Excepción no controlada (AppDomain)", ex.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, ex) =>
+        {
+            log.Error("app", "Excepción no observada (Task)", ex.Exception);
+            ex.SetObserved();
+        };
+
+        var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        log.Info("app", $"Pudu Print Server v{v?.Major}.{v?.Minor}.{v?.Build} iniciando — logs en {log.Carpeta}");
+
         // Servidor HTTP local para el ticket de caja. No depende del login de Supabase
         // (el PDF viaja en el request), por eso arranca antes del gate de sesión.
         try
@@ -52,16 +70,18 @@ public partial class App : Application
         catch (Exception ex)
         {
             // No bloquear el arranque del agente si el puerto está ocupado, etc.
-            System.Diagnostics.Debug.WriteLine($"[LocalHttpServer] no se pudo iniciar: {ex.Message}");
+            log.Error("local", "No se pudo iniciar el servidor HTTP local", ex);
         }
 
-        // Intentar restaurar sesión
-        var auth = new AuthService();
-        bool ok = await auth.TryRestoreSessionAsync();
+        // Intentar restaurar sesión. TryRestoreSessionAsync ya no lanza sin red (usa el token
+        // guardado); el try/catch es por si falla SQLite u otra cosa inesperada.
+        bool ok = false;
+        try { ok = await new AuthService().TryRestoreSessionAsync(); }
+        catch (Exception ex) { log.Error("auth", "Error restaurando sesión", ex); }
         if (!ok)
         {
             var login = new LoginWindow();
-            if (login.ShowDialog() != true) { Shutdown(); return; }
+            if (login.ShowDialog() != true) { log.Info("app", "Login cancelado, saliendo"); Shutdown(); return; }
         }
 
         // Arrancar procesador
@@ -79,6 +99,7 @@ public partial class App : Application
     /// </summary>
     public void Logout()
     {
+        LogService.Instance.Info("auth", "Cierre de sesión");
         // 1. Detener procesamiento y limpiar credenciales
         PrintQueueProcessor.Instance.Stop();
         UserSession.Instance.Clear();
@@ -114,6 +135,7 @@ public partial class App : Application
 
     private void MenuSalir_Click(object sender, RoutedEventArgs e)
     {
+        LogService.Instance.Info("app", "Salir desde la bandeja");
         PrintQueueProcessor.Instance.Stop();
         _httpServer?.Stop();
         _tray?.Dispose();
