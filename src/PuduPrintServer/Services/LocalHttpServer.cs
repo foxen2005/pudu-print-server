@@ -226,6 +226,8 @@ public class LocalHttpServer
             MesaNumero      = payload.MesaNumero,
             GarzonNombre    = payload.GarzonNombre,
             PedidoId        = payload.PedidoId,
+            Comensales      = payload.Comensales,
+            Notas           = payload.Notas,
             Items           = payload.Items,
             ImpresoraIp     = payload.ImpresoraIp,
             ImpresoraPuerto = payload.ImpresoraPuerto,
@@ -376,6 +378,8 @@ public class LocalHttpServer
         public string?      MesaNumero      { get; set; }
         public string?      GarzonNombre    { get; set; }
         public string?      PedidoId        { get; set; }
+        public int?         Comensales      { get; set; }
+        public string?      Notas           { get; set; }
         public JsonElement? Items           { get; set; } // CartItem[] tal cual va a cola_impresion
         public string?      ImpresoraIp     { get; set; }
         public int?         ImpresoraPuerto { get; set; }

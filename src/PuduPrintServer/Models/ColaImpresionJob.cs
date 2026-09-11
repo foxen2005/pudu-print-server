@@ -12,6 +12,9 @@ public class ColaImpresionJob
     [JsonPropertyName("mesa_numero")]     public string? MesaNumero      { get; set; }
     [JsonPropertyName("garzon_nombre")]   public string? GarzonNombre    { get; set; }
     [JsonPropertyName("pedido_id")]       public string? PedidoId        { get; set; }
+    // Comensales y nota del pedido: van en TODAS las comandas de la mesa (cocina, barra...)
+    [JsonPropertyName("comensales")]      public int?    Comensales      { get; set; }
+    [JsonPropertyName("notas")]           public string? Notas           { get; set; }
     // IP y puerto YA vienen copiados desde zonas_produccion por POS Matic al encolar
     [JsonPropertyName("impresora_ip")]    public string? ImpresoraIp     { get; set; }
     [JsonPropertyName("impresora_puerto")]public int?    ImpresoraPuerto  { get; set; }

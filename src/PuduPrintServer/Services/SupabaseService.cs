@@ -29,7 +29,7 @@ public class SupabaseService
         // ya vienen copiados en cola_impresion por POS Matic al encolar.
         // Se agrega zona_nombre opcionalmente via zonas_produccion(nombre) solo para el log.
         var url = $"{BaseUrl}/rest/v1/cola_impresion" +
-                  $"?select=id,zona_id,estado,items,mesa_numero,garzon_nombre,pedido_id" +
+                  $"?select=id,zona_id,estado,items,mesa_numero,garzon_nombre,pedido_id,comensales,notas" +
                   $",impresora_ip,impresora_puerto,zonas_produccion(nombre)" +
                   $"&estado=eq.pendiente&user_id=eq.{uid}&limit=10&order=created_at.asc";
         using var http = NewClient();
