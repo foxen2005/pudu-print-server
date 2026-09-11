@@ -34,11 +34,10 @@ public class LocalHttpServer
     // - _comandasEnCurso: id → Task de la impresión en curso. Un duplicado que llega mientras la
     //   primera aún imprime ESPERA ese mismo Task y responde con su resultado real (si falla,
     //   el POS ve el error y cae a cola_impresion; no un "ok" a ciegas).
-    // - _comandasImpresas: ids ya impresos con éxito (últimos 200) → ok sin reimprimir.
-    private readonly Dictionary<string, Task> _comandasEnCurso  = new();
-    private readonly Queue<string>            _comandasImpresasOrden = new();
-    private readonly HashSet<string>          _comandasImpresas = new();
-    private const int MaxComandasImpresas = 200;
+    // - Ids ya impresos: registro compartido en PrintQueueProcessor (YaImpresa), el mismo que
+    //   consulta el poll de cola_impresion → una comanda impresa acá y luego encolada con el
+    //   mismo id como respaldo no sale dos veces.
+    private readonly Dictionary<string, Task> _comandasEnCurso = new();
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
@@ -237,7 +236,7 @@ public class LocalHttpServer
         bool duplicada;
         lock (_comandasEnCurso)
         {
-            if (_comandasImpresas.Contains(id))
+            if (PrintQueueProcessor.Instance.YaImpresa(id))
             {
                 _log.Warn("local", $"Comanda {id} ya impresa, no se reimprime");
                 impresion = Task.CompletedTask;
@@ -269,21 +268,12 @@ public class LocalHttpServer
         }
     }
 
-    /// <summary>Imprime y, si sale bien, marca el id como impreso; en todo caso lo saca de "en curso".</summary>
+    /// <summary>Imprime (ImprimirComandaAsync registra el id si sale bien); en todo caso lo saca de "en curso".</summary>
     private async Task ImprimirYRegistrarAsync(ColaImpresionJob job)
     {
         try
         {
             await PrintQueueProcessor.Instance.ImprimirComandaAsync(job, "local");
-            lock (_comandasEnCurso)
-            {
-                if (_comandasImpresas.Add(job.Id))
-                {
-                    _comandasImpresasOrden.Enqueue(job.Id);
-                    while (_comandasImpresasOrden.Count > MaxComandasImpresas)
-                        _comandasImpresas.Remove(_comandasImpresasOrden.Dequeue());
-                }
-            }
         }
         finally
         {

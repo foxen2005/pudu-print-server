@@ -29,6 +29,31 @@ public class PrintQueueProcessor
     // veces lanza "port in use" y dos conexiones TCP 9100 a la misma térmica se pisan.
     private readonly SemaphoreSlim    _printLock = new(1, 1);
 
+    // Ids ya impresos con éxito (últimos 200), sin importar el origen (poll o /comanda). Es lo
+    // que evita la doble impresión cuando el POS, tras un timeout del endpoint local, encola la
+    // MISMA comanda (mismo id) en cola_impresion: si acá ya salió, el poll la marca impresa sin
+    // volver a imprimir. LocalHttpServer consulta este mismo registro para sus reintentos.
+    private readonly object          _impresasLock  = new();
+    private readonly Queue<string>   _impresasOrden = new();
+    private readonly HashSet<string> _impresas      = new();
+    private const int MaxImpresas = 200;
+
+    public bool YaImpresa(string id)
+    {
+        lock (_impresasLock) return _impresas.Contains(id);
+    }
+
+    private void RegistrarImpresa(string id)
+    {
+        lock (_impresasLock)
+        {
+            if (!_impresas.Add(id)) return;
+            _impresasOrden.Enqueue(id);
+            while (_impresasOrden.Count > MaxImpresas)
+                _impresas.Remove(_impresasOrden.Dequeue());
+        }
+    }
+
     public event Action<PrintJobResult>? JobCompleted;
     public event Action<string>? JobReceiving; // zona_id — se dispara antes de imprimir
 
@@ -95,6 +120,14 @@ public class PrintQueueProcessor
 
     private async Task ProcessJobAsync(ColaImpresionJob job)
     {
+        if (YaImpresa(job.Id))
+        {
+            // El POS la mandó por /comanda, el agente la imprimió pero la respuesta no llegó a
+            // tiempo, y el POS la encoló con el mismo id como respaldo. Ya salió: solo cerrarla.
+            _log.Warn("cola", $"Comanda {job.Id} ya impresa por el endpoint local: se marca impresa sin reimprimir");
+            await _supa.PatchEstadoAsync(job.Id, "impreso");
+            return;
+        }
         await _supa.PatchEstadoAsync(job.Id, "procesando");
         try
         {
@@ -123,6 +156,15 @@ public class PrintQueueProcessor
         await _printLock.WaitAsync();
         try
         {
+            // Re-chequeo DENTRO del lock: la misma comanda puede llegar por /comanda y por la cola
+            // (mismo id) y quedar las dos esperando el lock; la segunda no debe volver a imprimir.
+            if (YaImpresa(job.Id))
+            {
+                _log.Warn(origen, $"Comanda {zona,-12} Mesa {mesa,-6} ya impresa (id {job.Id}): omitida");
+                JobCompleted?.Invoke(new PrintJobResult(job, true, null, origen));
+                return;
+            }
+
             var negocio = _db.GetConfig("negocio_nombre") ?? "PUDU";
             var bytes   = _formatter.FormatComanda(job, negocio);
 
@@ -145,6 +187,7 @@ public class PrintQueueProcessor
                     await _printer.PrintComAsync(bytes, imp.PuertoCom);
             }
 
+            RegistrarImpresa(job.Id);
             _log.Info(origen, $"Comanda {zona,-12} Mesa {mesa,-6} ✓ impreso");
             JobCompleted?.Invoke(new PrintJobResult(job, true, null, origen));
         }
