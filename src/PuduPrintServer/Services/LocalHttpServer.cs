@@ -31,9 +31,14 @@ public class LocalHttpServer
     private CancellationTokenSource?   _cts;
 
     // Idempotencia de /comanda: el POS reintenta con el mismo id si hubo timeout → no reimprimir.
-    private readonly Queue<string>   _comandasVistasOrden = new();
-    private readonly HashSet<string> _comandasVistas      = new();
-    private const int MaxComandasVistas = 200;
+    // - _comandasEnCurso: id → Task de la impresión en curso. Un duplicado que llega mientras la
+    //   primera aún imprime ESPERA ese mismo Task y responde con su resultado real (si falla,
+    //   el POS ve el error y cae a cola_impresion; no un "ok" a ciegas).
+    // - _comandasImpresas: ids ya impresos con éxito (últimos 200) → ok sin reimprimir.
+    private readonly Dictionary<string, Task> _comandasEnCurso  = new();
+    private readonly Queue<string>            _comandasImpresasOrden = new();
+    private readonly HashSet<string>          _comandasImpresas = new();
+    private const int MaxComandasImpresas = 200;
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
@@ -213,17 +218,10 @@ public class LocalHttpServer
         if (payload.Items is not { ValueKind: JsonValueKind.Array } || payload.Items.Value.GetArrayLength() == 0)
         { await WriteJson(res, 400, new { ok = false, error = "items requerido (arreglo no vacío)" }); return; }
 
-        // Reintento del POS con el mismo id → ya se imprimió, responder ok sin duplicar.
-        if (!string.IsNullOrEmpty(payload.Id) && !RegistrarComanda(payload.Id))
-        {
-            _log.Warn("local", $"Comanda {payload.Id} repetida, no se reimprime");
-            await WriteJson(res, 200, new { ok = true, duplicada = true });
-            return;
-        }
-
+        var id = string.IsNullOrEmpty(payload.Id) ? Guid.NewGuid().ToString() : payload.Id;
         var job = new ColaImpresionJob
         {
-            Id              = payload.Id ?? Guid.NewGuid().ToString(),
+            Id              = id,
             ZonaId          = payload.ZonaId,
             ZonaNombre      = payload.ZonaNombre,
             MesaNumero      = payload.MesaNumero,
@@ -235,35 +233,62 @@ public class LocalHttpServer
             Estado          = "local",
         };
 
+        Task impresion;
+        bool duplicada;
+        lock (_comandasEnCurso)
+        {
+            if (_comandasImpresas.Contains(id))
+            {
+                _log.Warn("local", $"Comanda {id} ya impresa, no se reimprime");
+                impresion = Task.CompletedTask;
+                duplicada = true;
+            }
+            else if (_comandasEnCurso.TryGetValue(id, out var enCurso))
+            {
+                _log.Warn("local", $"Comanda {id} repetida mientras se imprime: esperando la primera");
+                impresion = enCurso;
+                duplicada = true;
+            }
+            else
+            {
+                impresion = ImprimirYRegistrarAsync(job);
+                _comandasEnCurso[id] = impresion;
+                duplicada = false;
+            }
+        }
+
         try
         {
-            await PrintQueueProcessor.Instance.ImprimirComandaAsync(job, "local");
-            await WriteJson(res, 200, new { ok = true });
+            await impresion;
+            await WriteJson(res, 200, new { ok = true, duplicada });
         }
         catch (Exception ex)
         {
             // Ya quedó en el log/UI vía ImprimirComandaAsync; el POS cae a cola_impresion.
-            if (!string.IsNullOrEmpty(payload.Id)) OlvidarComanda(payload.Id); // permitir reintento real
             await WriteJson(res, 500, new { ok = false, error = ex.Message });
         }
     }
 
-    /// <summary>true si es nueva (se registra); false si ya se había visto.</summary>
-    private bool RegistrarComanda(string id)
+    /// <summary>Imprime y, si sale bien, marca el id como impreso; en todo caso lo saca de "en curso".</summary>
+    private async Task ImprimirYRegistrarAsync(ColaImpresionJob job)
     {
-        lock (_comandasVistas)
+        try
         {
-            if (!_comandasVistas.Add(id)) return false;
-            _comandasVistasOrden.Enqueue(id);
-            while (_comandasVistasOrden.Count > MaxComandasVistas)
-                _comandasVistas.Remove(_comandasVistasOrden.Dequeue());
-            return true;
+            await PrintQueueProcessor.Instance.ImprimirComandaAsync(job, "local");
+            lock (_comandasEnCurso)
+            {
+                if (_comandasImpresas.Add(job.Id))
+                {
+                    _comandasImpresasOrden.Enqueue(job.Id);
+                    while (_comandasImpresasOrden.Count > MaxComandasImpresas)
+                        _comandasImpresas.Remove(_comandasImpresasOrden.Dequeue());
+                }
+            }
         }
-    }
-
-    private void OlvidarComanda(string id)
-    {
-        lock (_comandasVistas) _comandasVistas.Remove(id);
+        finally
+        {
+            lock (_comandasEnCurso) _comandasEnCurso.Remove(job.Id);
+        }
     }
 
     /// <summary>Abre el cajón monedero on-demand (botón manual en el POS) enviando el pulso RAW.</summary>

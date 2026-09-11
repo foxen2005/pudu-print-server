@@ -22,7 +22,12 @@ public class PrintQueueProcessor
     private readonly LogService       _log       = LogService.Instance;
     private System.Timers.Timer?      _timer;
     private volatile bool             _running;
-    private bool                      _refreshIntentado; // un solo reintento de refresh por caída
+    private DateTime                  _ultimoRefresh = DateTime.MinValue; // throttle del refresh ante 401
+    private static readonly TimeSpan  RefreshCooldown = TimeSpan.FromSeconds(60);
+
+    // Serializa TODA la impresión de comandas (poll + /comanda concurrentes): un COM abierto dos
+    // veces lanza "port in use" y dos conexiones TCP 9100 a la misma térmica se pisan.
+    private readonly SemaphoreSlim    _printLock = new(1, 1);
 
     public event Action<PrintJobResult>? JobCompleted;
     public event Action<string>? JobReceiving; // zona_id — se dispara antes de imprimir
@@ -33,6 +38,8 @@ public class PrintQueueProcessor
 
     public void Start(int intervalMs = IntervaloOnlineMs)
     {
+        _ultimoRefresh = DateTime.MinValue; // tras re-login, el primer 401 puede refrescar de inmediato
+        _timer?.Dispose();
         _timer = new System.Timers.Timer(intervalMs) { AutoReset = true };
         _timer.Elapsed += OnTick;
         _timer.Start();
@@ -54,11 +61,12 @@ public class PrintQueueProcessor
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // Volvió la red pero el token guardado ya no sirve: reintentar el refresh UNA vez
-            // por caída. Sin logout automático (un 401 transitorio no debe botar al login).
-            if (!_refreshIntentado)
+            // Volvió la red pero el token guardado ya no sirve: reintentar el refresh, como máximo
+            // una vez por minuto (si el refresh mismo falla por red/429, se vuelve a intentar
+            // después). Sin logout automático: un 401 transitorio no debe botar al login.
+            if (DateTime.Now - _ultimoRefresh >= RefreshCooldown)
             {
-                _refreshIntentado = true;
+                _ultimoRefresh = DateTime.Now;
                 _log.Warn("cola", "Supabase respondió 401: reintentando refresh de sesión");
                 try { await new AuthService().TryRestoreSessionAsync(); }
                 catch (Exception rex) { _log.Error("cola", "Refresh de sesión falló", rex); }
@@ -76,7 +84,7 @@ public class PrintQueueProcessor
 
     private void SetOnline(bool online, string? motivo = null)
     {
-        if (online) _refreshIntentado = false;
+        if (online) _ultimoRefresh = DateTime.MinValue;
         if (Online == online) return; // solo loguear/notificar cuando CAMBIA (no una línea por tick)
         Online = online;
         if (_timer != null) _timer.Interval = online ? IntervaloOnlineMs : IntervaloOfflineMs;
@@ -112,6 +120,7 @@ public class PrintQueueProcessor
         JobReceiving?.Invoke(job.ZonaId);
         var zona = job.ZonaNombre ?? job.ZonaId[..Math.Min(8, job.ZonaId.Length)];
         var mesa = job.MesaNumero ?? "-";
+        await _printLock.WaitAsync();
         try
         {
             var negocio = _db.GetConfig("negocio_nombre") ?? "PUDU";
@@ -145,5 +154,6 @@ public class PrintQueueProcessor
             JobCompleted?.Invoke(new PrintJobResult(job, false, ex.Message, origen));
             throw;
         }
+        finally { _printLock.Release(); }
     }
 }
