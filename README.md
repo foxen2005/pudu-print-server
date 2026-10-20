@@ -52,7 +52,7 @@ POS Matic (Chrome, https://pudusystem.com)  ──►  http://127.0.0.1:21777  (
 |---|---|---|---|
 | `GET` | `/health` | — | `{ ok, servicio, puerto, version }` — detección del agente (`version` desde 1.0.6, ej. `"1.0.6"`) |
 | `GET` | `/impresoras` | — | `{ ok, impresoras: string[] }` — impresoras de Windows |
-| `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }`. Desde 1.0.6 imprime solo las páginas reales (omite la 2.ª página fantasma de html2pdf) y después manda un corte RAW (`cortar_despues_pdf`) |
+| `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }`. Desde 1.0.6 imprime solo las páginas reales (omite la última página si tiene menos de 1 mm de contenido: la página fantasma de html2pdf; lo deja en el log) y después manda un corte RAW (`cortar_despues_pdf`) |
 | `POST` | `/cajon` | `{ impresora? }` | abre el cajón monedero (pulso ESC/POS por RAW) |
 | `POST` | `/comanda` | ver tabla de abajo | comanda a cocina **directa** (misma resolución de impresora que la cola). Idempotente por `id`: un reintento no reimprime |
 
@@ -108,7 +108,9 @@ Fecha/hora                      20-10-2026 22:04
 ```
 
 - Tabla de caracteres: el texto se codifica en CP850 y desde 1.0.6 se envía `ESC t 2` (PC850) tras cada `ESC @`. El √ no existe en CP850: se emite `ESC t 0` (PC437) + `0xFB` + `ESC t 2`.
-- Corte: `GS V 66 0` (la impresora avanza sola hasta la cuchilla y corta) precedido de un solo salto de línea, en vez de `Feed(4)` + `GS V 65 3` → ~2 cm menos de papel por comanda.
+- Corte: `GS V 65 0` (corte **completo**, "función B": la impresora avanza sola hasta la cuchilla y corta, sin salto de línea previo) en vez de `Feed(4)` + `GS V 65 3` → ~2 cm menos de papel por comanda.
+- Todo lo que el agente manda por ESC/POS (comandas y tickets de prueba) arranca con `ESC @` + `ESC t 2` (`EscPos.Initialize`).
+- Los textos variables (zona, mesa, garzón, nota, nombre y descripción del ítem) se normalizan a lo que imprime CP850 antes de calcular columnas: un emoji sale como un `?` de una columna y el recuadro no se descuadra.
 - Nombres largos saltan de línea con sangría (no se truncan).
 
 ---
@@ -250,7 +252,7 @@ Claves de `config` que se pueden ajustar a mano (no hay pantalla para estas):
 | `http_port` | `21777` | 1.0.3 | puerto del servidor HTTP local |
 | `impresora_ticket` | — | 1.0.3 | impresora de Windows para `/imprimir` y `/cajon` si el POS no la manda |
 | `ancho_columnas` | `48` | 1.0.6 | columnas de la comanda: `48` = 80 mm (fuente A), `32` = 58 mm. Rango aceptado 24–64 |
-| `cortar_despues_pdf` | `true` | 1.0.6 | después de imprimir un PDF por `/imprimir`, manda `GS V 66 0` por RAW. Poner `false` si el driver de la impresora ya corta (si no, corta dos veces) |
+| `cortar_despues_pdf` | `true` | 1.0.6 | después de imprimir un PDF por `/imprimir`, manda `GS V 65 0` (corte completo) por RAW. **Si el driver de Windows de esa impresora ya corta al final del documento, ponerlo en `false`** para evitar el doble corte. El valor efectivo queda en el log al arrancar (`cortar_despues_pdf = true/false`) |
 
 Ejemplo (con la app cerrada, `sqlite3` sobre `print-server.db`):
 

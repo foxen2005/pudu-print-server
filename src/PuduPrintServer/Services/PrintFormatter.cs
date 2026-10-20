@@ -14,7 +14,7 @@ namespace PuduPrintServer.Services;
 ///
 ///   COMANDA                       (doble alto + doble ancho)
 ///   ─ C O C I N A ─               (zona con letras espaciadas)
-///   + ADICIONAL #2                (o franja REIMPRESIÓN / bloque ANULAR)
+///   + ADICIONAL #2                (o franja REIMPRESIÓN / franja ANULAR)
 ///   - - - - - - - - - - - - -
 ///   MESA                 S.8      (doble alto + doble ancho)
 ///   Garzón / Comensales / Fecha/hora a dos columnas
@@ -43,18 +43,18 @@ public class PrintFormatter
         @"^(?<zona>.*?)\s*·\s*(?:(?<adic>ADICIONAL)\s*#\s*(?<sec>\d+)|(?<anul>ANULAR)|(?<reimp>REIMPRESI[ÓO]N).*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    public byte[] FormatComanda(ColaImpresionJob job, string negocioNombre, int anchoColumnas = AnchoPorDefecto)
+    // 1.0.6 (code review): se quitó el parámetro negocioNombre; el diseño aprobado no lleva el
+    // nombre del negocio (el título es "COMANDA").
+    public byte[] FormatComanda(ColaImpresionJob job, int anchoColumnas = AnchoPorDefecto)
     {
-        // 1.0.6: el diseño aprobado ya no lleva el nombre del negocio arriba (título "COMANDA");
-        // se conserva el parámetro para no cambiar la firma que usa PrintQueueProcessor.
-        _ = negocioNombre;
-
         // Topes de sanidad: menos de 24 columnas no entra ni "Fecha/hora", más de 64 no existe en térmicas.
+        // 1.0.6 (code review): ÚNICA validación de ancho_columnas (PrintQueueProcessor solo parsea).
         int w = Math.Clamp(anchoColumnas, 24, 64);
         var ahora = DateTime.Now;
 
         // ── Zona, tipo y secuencia ────────────────────────────────────────────────────────────
-        var zonaCruda = job.ZonaNombre ?? job.ZonaId[..Math.Min(8, job.ZonaId.Length)];
+        // 1.0.6 (code review): todo texto variable pasa por EscPos.Imprimible → largo = bytes CP850.
+        var zonaCruda = EscPos.Imprimible(job.ZonaNombre ?? job.ZonaId[..Math.Min(8, job.ZonaId.Length)]);
         var tipoExplicito = NormalizarTipo(job.TipoComanda);
         string zona;
         string? tipo;
@@ -63,11 +63,13 @@ public class PrintFormatter
         {
             // Contrato POS → agente 1.0.6: con tipoComanda, zonaNombre SIGUE trayendo el rótulo viejo
             // pegado ("Barra · ADICIONAL #2", para que el agente 1.0.5 lo muestre). La zona limpia
-            // es zonaBase; si falta, la parte de zonaNombre antes de " · ". El rótulo se arma SOLO
-            // desde tipoComanda + secuencia (no desde el texto pegado).
+            // es zonaBase. Si falta (siempre por la cola, donde zona_nombre ya viene limpio del join)
+            // se quitan SOLO los rótulos conocidos con SepararRotulo (1.0.6, code review: antes se
+            // cortaba en el primer "·" y una zona "Cocina · Fríos" quedaba "Cocina"). El rótulo se
+            // arma SOLO desde tipoComanda + secuencia (no desde el texto pegado).
             zona = !string.IsNullOrWhiteSpace(job.ZonaBase)
-                ? job.ZonaBase.Trim()
-                : AntesDelSeparador(zonaCruda);
+                ? EscPos.Imprimible(job.ZonaBase).Trim()
+                : SepararRotulo(zonaCruda).zona;
             tipo = tipoExplicito;
             secuencia = job.Secuencia;
         }
@@ -98,8 +100,7 @@ public class PrintFormatter
 
         var p = new List<byte[]>
         {
-            EscPos.Initialize(),
-            EscPos.CodeTableCp850(), // 1.0.6: tabla explícita (ver EscPos.CodeTableCp850)
+            EscPos.Initialize(), // 1.0.6 (code review): ya incluye ESC t 2 (PC850), ver EscPos.Initialize
             EscPos.Left(),
         };
 
@@ -163,7 +164,7 @@ public class PrintFormatter
         if (!string.IsNullOrWhiteSpace(job.MesaNumero))
         {
             int wGrande = w / 2;
-            var mesa = job.MesaNumero.Trim().ToUpperInvariant();
+            var mesa = EscPos.Imprimible(job.MesaNumero).Trim().ToUpperInvariant();
             p.Add(EscPos.BoldOn());
             p.Add(EscPos.Size(dobleAncho: true, dobleAlto: true));
             if ("MESA".Length + 1 + mesa.Length <= wGrande)
@@ -181,14 +182,14 @@ public class PrintFormatter
 
         // ── Garzón / Comensales / Fecha a dos columnas (valor a la derecha, en negrita) ────────
         if (!string.IsNullOrWhiteSpace(job.GarzonNombre))
-            p.AddRange(FilaDato("Garzón", job.GarzonNombre.Trim(), w, negrita: true));
+            p.AddRange(FilaDato("Garzón", EscPos.Imprimible(job.GarzonNombre).Trim(), w, negrita: true));
         if (job.Comensales is > 0)
             p.AddRange(FilaDato("Comensales", job.Comensales.Value.ToString(CultureInfo.InvariantCulture), w, negrita: true));
         p.AddRange(FilaDato("Fecha/hora", ahora.ToString("dd-MM-yyyy HH:mm", CultureInfo.InvariantCulture), w, negrita: false));
 
         // ── Nota del pedido en recuadro (antes de los productos: cocina la lee primero) ─────────
         if (!string.IsNullOrWhiteSpace(job.Notas))
-            p.AddRange(RecuadroNota(job.Notas.Trim(), w));
+            p.AddRange(RecuadroNota(EscPos.Imprimible(job.Notas).Trim(), w));
 
         // ── Ítems ──────────────────────────────────────────────────────────────────────────────
         p.Add(EscPos.FeedDots(10));
@@ -223,9 +224,8 @@ public class PrintFormatter
         p.Add(EscPos.Left());
 
         // 1.0.6: antes Feed(4) + GS V 65 3 (4 renglones fijos + distancia a la cuchilla ≈ 2 cm en
-        // blanco). GS V 66 0 avanza solo hasta la cuchilla; se deja UN renglón para que el corte no
-        // roce el pie (la cuchilla corta justo bajo la posición de impresión actual).
-        p.Add(EscPos.Feed(1));
+        // blanco). GS V 65 0 (corte completo, función B) avanza solo hasta la cuchilla y corta.
+        // Code review: se quitó el Feed(1) previo; el avance hasta la cuchilla ya lo hace el comando.
         p.Add(EscPos.CutFeed());
 
         return EscPos.Concat(p.ToArray());
@@ -358,14 +358,6 @@ public class PrintFormatter
         return (zonaNombre.Trim(), null, null);
     }
 
-    /// <summary>"Barra · ADICIONAL #2" → "Barra" (todo lo anterior al primer " · "); sin separador, tal cual (1.0.6).</summary>
-    private static string AntesDelSeparador(string zonaNombre)
-    {
-        var i = zonaNombre.IndexOf('·');
-        var limpia = (i > 0 ? zonaNombre[..i] : zonaNombre).Trim();
-        return limpia.Length > 0 ? limpia : zonaNombre.Trim();
-    }
-
     /// <summary>tipo_comanda en minúsculas y sin tilde ("Anulación" → "anulacion"); vacío → null.</summary>
     private static string? NormalizarTipo(string? tipo)
     {
@@ -404,9 +396,11 @@ public class PrintFormatter
                 {
                     // Campos reales del CartItem de POS Matic:
                     // "quantity" (no "cantidad"), "descripcion" = nota por producto.
-                    var nombre   = el.TryGetProperty("nombre", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
+                    // 1.0.6 (code review): nombre y descripción normalizados a lo que imprime CP850
+                    // (emoji → "?" de una columna) para que el wrap y el √ al borde cuadren.
+                    var nombre   = el.TryGetProperty("nombre", out var n) && n.ValueKind == JsonValueKind.String ? EscPos.Imprimible(n.GetString()) : "";
                     var cantidad = el.TryGetProperty("quantity", out var c) ? LeerCantidad(c) : 1m;
-                    var desc     = el.TryGetProperty("descripcion", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+                    var desc     = el.TryGetProperty("descripcion", out var d) && d.ValueKind == JsonValueKind.String ? EscPos.Imprimible(d.GetString()) : null;
                     var yaEnv    = LeerYaEnviado(el);
                     list.Add(new Item(nombre, cantidad, desc, yaEnv));
                 }

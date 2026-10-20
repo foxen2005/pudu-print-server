@@ -102,21 +102,28 @@ public class PdfPrinterService
         });
     }
 
-    // 1.0.6: una página final con menos de ~2 mm de alto (o de contenido) es la fantasma de html2pdf.
-    private const double MinAltoPaginaMm = 2.0;
-    // DPI de la revisión de contenido: a 100 dpi, 2 mm ≈ 8 px → resolución de sobra y render barato.
-    private const int DpiRevision = 100;
+    // 1.0.6: una página final con menos de ~1 mm de alto (o de tinta) es la fantasma de html2pdf.
+    // Code review: era 2 mm y podía tirar contenido real (una línea de pie corta en la página 2);
+    // con 1 mm solo cae lo que html2pdf deja por redondeo (1-2 px de un borde o de una letra).
+    private const double MinAltoPaginaMm = 1.0;
+    // DPI de la revisión de contenido: a 203 dpi (el de la térmica), 1 mm ≈ 8 px → medición fiable.
+    private const int DpiRevision = 203;
 
     /// <summary>
-    /// Índices de las páginas a imprimir (1.0.6). Se recortan solo páginas del FINAL (nunca la
-    /// primera) que sean fantasma: o la página mide menos de 2 mm de alto, o —como html2pdf repite el
-    /// mismo formato en todas las páginas— su contenido (filas con tinta) mide menos de 2 mm.
+    /// Índices de las páginas a imprimir (1.0.6). Code review: se revisa y omite SOLO la ÚLTIMA
+    /// página (nunca la primera, ni varias en cadena) si es fantasma: o la página mide menos de 1 mm
+    /// de alto, o —como html2pdf repite el mismo formato en todas las páginas— su contenido (filas
+    /// con tinta) mide menos de 1 mm. Cuando la omite deja una línea Info en el log.
     /// </summary>
     private static List<int> PaginasReales(PdfDocument doc)
     {
         var reales = Enumerable.Range(0, doc.PageCount).ToList();
-        while (reales.Count > 1 && EsPaginaFantasma(doc, reales[^1]))
+        if (reales.Count > 1 && EsPaginaFantasma(doc, reales[^1]))
+        {
+            LogService.Instance.Info("local",
+                $"PDF: se omite la página {reales.Count} de {reales.Count} (vacía, < {MinAltoPaginaMm} mm de contenido)");
             reales.RemoveAt(reales.Count - 1);
+        }
         return reales;
     }
 

@@ -61,6 +61,10 @@ public class LocalHttpServer
         _cts = new CancellationTokenSource();
         _ = LoopAsync(_cts.Token);
         _log.Info("local", $"Servidor local escuchando en http://127.0.0.1:{Port}");
+        // 1.0.6 (code review): una línea por arranque con el valor efectivo, para diagnosticar un
+        // doble corte (driver que ya corta + este corte RAW) sin tener que abrir la SQLite.
+        _log.Info("local", $"cortar_despues_pdf = {(CortarDespuesPdf() ? "true" : "false")} " +
+                           "(corte RAW GS V 65 0 después de cada PDF de /imprimir)");
     }
 
     public void Stop()
@@ -191,8 +195,9 @@ public class LocalHttpServer
 
         // 1.0.6 (bug 10 del plan 2026-10-20): el PDF va por GDI y el corte quedaba a criterio del
         // driver (muchos no cortan, o cortan después de un largo de página fijo). Después del
-        // trabajo GDI se manda un trabajo RAW aparte con GS V 66 0 (avanza hasta la cuchilla y
-        // corta). El spooler los procesa en orden, así que el corte sale después del ticket.
+        // trabajo GDI se manda un trabajo RAW aparte con GS V 65 0 (corte completo: avanza hasta la
+        // cuchilla y corta; code review: antes GS V 66 0, que es parcial). El spooler los procesa
+        // en orden, así que el corte sale después del ticket.
         // Se apaga con config `cortar_despues_pdf` = false/0 si el driver ya corta (doble corte).
         // Best-effort: el ticket ya salió, un corte fallido no falla la venta.
         if (CortarDespuesPdf())
