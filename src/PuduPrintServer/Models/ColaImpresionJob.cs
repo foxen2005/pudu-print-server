@@ -20,6 +20,16 @@ public class ColaImpresionJob
     [JsonPropertyName("impresora_puerto")]public int?    ImpresoraPuerto  { get; set; }
     // Nombre de zona (join opcional, solo para display en log)
     [JsonPropertyName("zona_nombre")]     public string? ZonaNombre      { get; set; }
+    // 1.0.6 — rótulo de la comanda v2 (columnas ya existentes en cola_impresion, migración
+    // 20261017191459 de pos-matic_no): comanda | adicional | reimpresion | anulacion | marcado.
+    // Null = POS viejo → PrintFormatter intenta deducirlo del sufijo de zona_nombre.
+    [JsonPropertyName("tipo_comanda")]    public string? TipoComanda     { get; set; }
+    // 1.0.6 — número del envío POR ZONA (ADICIONAL #n, solo si tipo_comanda = adicional). Null = POS viejo.
+    [JsonPropertyName("secuencia")]       public int?    Secuencia       { get; set; }
+    // 1.0.6 — nombre limpio de la zona ("Cocina") que manda el POS por /comanda (`zonaBase`), porque
+    // zonaNombre sigue trayendo el rótulo viejo pegado para el agente 1.0.5. En la cola no existe:
+    // ahí zona_nombre sale del join con zonas_produccion y ya viene limpio.
+    [JsonIgnore]                          public string? ZonaBase        { get; set; }
 
     // Helper — items como string JSON para el formatter
     public string ItemsJson => Items?.ToString() ?? "[]";

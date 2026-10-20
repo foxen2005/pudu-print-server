@@ -50,13 +50,66 @@ POS Matic (Chrome, https://pudusystem.com)  ──►  http://127.0.0.1:21777  (
 
 | Método | Ruta | Body | Respuesta |
 |---|---|---|---|
-| `GET` | `/health` | — | `{ ok, servicio, puerto }` — detección del agente |
+| `GET` | `/health` | — | `{ ok, servicio, puerto, version }` — detección del agente (`version` desde 1.0.6, ej. `"1.0.6"`) |
 | `GET` | `/impresoras` | — | `{ ok, impresoras: string[] }` — impresoras de Windows |
-| `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }` |
+| `POST` | `/imprimir` | `{ pdfBase64, impresora?, abrirCajon? }` | `{ ok }` o `{ ok:false, error }`. Desde 1.0.6 imprime solo las páginas reales (omite la 2.ª página fantasma de html2pdf) y después manda un corte RAW (`cortar_despues_pdf`) |
 | `POST` | `/cajon` | `{ impresora? }` | abre el cajón monedero (pulso ESC/POS por RAW) |
-| `POST` | `/comanda` | `{ id, zonaId, zonaNombre, mesaNumero?, garzonNombre?, pedidoId?, items, impresoraIp?, impresoraPuerto? }` | comanda a cocina **directa** (misma resolución de impresora que la cola). Idempotente por `id`: un reintento no reimprime |
+| `POST` | `/comanda` | ver tabla de abajo | comanda a cocina **directa** (misma resolución de impresora que la cola). Idempotente por `id`: un reintento no reimprime |
 
 Desde v1.0.4 POS Matic manda las comandas por `/comanda` cuando el agente responde (switch "Comandas de cocina por el agente" en Configuración) y solo cae a `cola_impresion` si no. Así las comandas salen por la LAN **sin internet**.
+
+#### Campos de `POST /comanda` (y columnas equivalentes de `cola_impresion`)
+
+| Campo `/comanda` | Columna `cola_impresion` | Tipo | Desde | Uso en el papel |
+|---|---|---|---|---|
+| `id` | `id` | uuid | 1.0.4 | idempotencia (el mismo id por `/comanda` y por la cola sale una sola vez) |
+| `zonaId` | `zona_id` | uuid | 1.0.4 | resolución de impresora local (USB/COM) |
+| `zonaNombre` | join `zonas_produccion(nombre)` (limpio) | text | 1.0.4 | el POS lo sigue mandando con el rótulo viejo pegado ("Barra · ADICIONAL #2") para el agente 1.0.5. En 1.0.6, sin `tipoComanda` se deduce el rótulo de ese sufijo |
+| `zonaBase` | — | text | 1.0.6 | nombre limpio de la zona ("Cocina") → "─ C O C I N A ─". Con `tipoComanda` y sin `zonaBase` se usa lo de `zonaNombre` antes de " · " |
+| `mesaNumero` | `mesa_numero` | text | 1.0.4 | "MESA  S.8" grande |
+| `garzonNombre` | `garzon_nombre` | text | 1.0.4 | fila "Garzón" |
+| `pedidoId` | `pedido_id` | uuid | 1.0.4 | — |
+| `comensales` | `comensales` | int | 1.0.5 | fila "Comensales" (solo si > 0) |
+| `notas` | `notas` | text | 1.0.5 | recuadro "* NOTA" en negrita, antes de los productos |
+| `items` | `items` | CartItem[] (o string JSON) | 1.0.4 | por ítem: `nombre`, `quantity` (**decimal** desde 1.0.6: `1.5`, `0.25`, `"1,5"`; negativa en anulación), `descripcion` ("-> sin cebolla"), `ya_enviado` |
+| `items[].ya_enviado` | dentro de `items` (texto JSON) | bool (también acepta número > 0 o `yaEnviado`) | 1.0.6 | √ al final de la línea = ya en producción |
+| `tipoComanda` (o `tipo_comanda`) | `tipo_comanda` | `comanda` \| `adicional` \| `reimpresion` \| `anulacion` \| `marcado` | 1.0.6 | `adicional` → "+ ADICIONAL #n"; `reimpresion` → franja "REIMPRESIÓN" + "No preparar de nuevo" (todo con √) o "√ = ya en producción" (mezcla); `anulacion` → franja liviana entre dos líneas, "A N U L A R" (doble ancho, negrita) + "No preparar lo siguiente", con cantidades negativas |
+| `secuencia` | `secuencia` | int (por zona) | 1.0.6 | el `n` de "ADICIONAL #n"; solo se imprime si `tipoComanda` = `adicional` |
+| `impresoraIp`, `impresoraPuerto` | `impresora_ip`, `impresora_puerto` | text, int | 1.0.4 | impresora de red (TCP 9100) |
+
+Si `tipoComanda`/`secuencia`/`ya_enviado` no vienen (POS anterior), la comanda sale igual con el diseño nuevo; una reimpresión sin `ya_enviado` se trata como "todo ya enviado" (√ en todo, "No preparar de nuevo"). Un ítem ilegible sale como "?× (ERROR LEYENDO ÍTEM)" sin tirar el resto de la comanda.
+
+#### Formato de la comanda (1.0.6, texto ESC/POS)
+
+Imita el ticket aprobado en `pos-matic_no/maqueta-mesa.html` (bloque "Comanda v2"). Ejemplo a 48 columnas:
+
+```
+                 C O M A N D A                    (doble alto + doble ancho)
+                 ─ B A R R A ─
+────────────────────────────────────────────────
+             R E I M P R E S I Ó N
+              √ = ya en producción
+────────────────────────────────────────────────
+M E S A                                   S . 8   (doble alto + doble ancho)
+Garzón                                      raul
+Comensales                                     5
+Fecha/hora                      20-10-2026 22:04
+┌──────────────────────────────────────────────┐
+│ * NOTA                                       │
+│ Alergia al maní                              │
+└──────────────────────────────────────────────┘
+ 2× PISCO SOUR                                 √  (cantidad en doble alto)
+················································
+ 1× AGUA MINERAL 500ML
+    -> sin hielo
+                 TOTAL ÍTEMS: 3
+------------------------------------------------
+      Documento interno · solo producción
+```
+
+- Tabla de caracteres: el texto se codifica en CP850 y desde 1.0.6 se envía `ESC t 2` (PC850) tras cada `ESC @`. El √ no existe en CP850: se emite `ESC t 0` (PC437) + `0xFB` + `ESC t 2`.
+- Corte: `GS V 66 0` (la impresora avanza sola hasta la cuchilla y corta) precedido de un solo salto de línea, en vez de `Feed(4)` + `GS V 65 3` → ~2 cm menos de papel por comanda.
+- Nombres largos saltan de línea con sangría (no se truncan).
 
 ---
 
@@ -188,6 +241,25 @@ CREATE TABLE config (
     clave TEXT PRIMARY KEY,
     valor TEXT NOT NULL
 );
+```
+
+Claves de `config` que se pueden ajustar a mano (no hay pantalla para estas):
+
+| Clave | Default | Desde | Uso |
+|---|---|---|---|
+| `http_port` | `21777` | 1.0.3 | puerto del servidor HTTP local |
+| `impresora_ticket` | — | 1.0.3 | impresora de Windows para `/imprimir` y `/cajon` si el POS no la manda |
+| `ancho_columnas` | `48` | 1.0.6 | columnas de la comanda: `48` = 80 mm (fuente A), `32` = 58 mm. Rango aceptado 24–64 |
+| `cortar_despues_pdf` | `true` | 1.0.6 | después de imprimir un PDF por `/imprimir`, manda `GS V 66 0` por RAW. Poner `false` si el driver de la impresora ya corta (si no, corta dos veces) |
+
+Ejemplo (con la app cerrada, `sqlite3` sobre `print-server.db`):
+
+```sql
+INSERT INTO config(clave, valor) VALUES('ancho_columnas', '32')
+  ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor;
+```
+
+```sql
 
 -- Impresoras locales registradas (USB/BT por puerto COM)
 CREATE TABLE impresoras (

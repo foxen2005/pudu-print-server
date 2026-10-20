@@ -64,9 +64,14 @@ public class PdfPrinterService
             };
             printDoc.PrintController = new StandardPrintController(); // sin diálogo de progreso
 
-            int page = 0;
+            // 1.0.6 (bug 8 del plan 2026-10-20): solo las páginas reales. html2pdf (PDF_generador_.ts
+            // del POS) pagina con Math.floor y deja una 2.ª página "fantasma" casi vacía; antes se
+            // imprimía igual → un largo de página de papel en blanco por ticket.
+            var paginas = PaginasReales(doc);
+            int idx = 0;
             printDoc.PrintPage += (_, e) =>
             {
+                int page = paginas[idx];
                 // Área realmente imprimible (device units = 1/100"), ya sin los márgenes físicos.
                 var clip = e.Graphics.VisibleClipBounds;
                 // 98% del ancho imprimible → margen simétrico chico + permite centrar.
@@ -90,11 +95,66 @@ public class PdfPrinterService
                 float x = clip.X + (clip.Width - destW) / 2f;   // centrado horizontal
                 e.Graphics.DrawImage(bw, x, clip.Y, destW, destH);
 
-                e.HasMorePages = ++page < doc.PageCount;
+                e.HasMorePages = ++idx < paginas.Count; // 1.0.6: recorre solo las páginas reales
             };
 
             printDoc.Print();
         });
+    }
+
+    // 1.0.6: una página final con menos de ~2 mm de alto (o de contenido) es la fantasma de html2pdf.
+    private const double MinAltoPaginaMm = 2.0;
+    // DPI de la revisión de contenido: a 100 dpi, 2 mm ≈ 8 px → resolución de sobra y render barato.
+    private const int DpiRevision = 100;
+
+    /// <summary>
+    /// Índices de las páginas a imprimir (1.0.6). Se recortan solo páginas del FINAL (nunca la
+    /// primera) que sean fantasma: o la página mide menos de 2 mm de alto, o —como html2pdf repite el
+    /// mismo formato en todas las páginas— su contenido (filas con tinta) mide menos de 2 mm.
+    /// </summary>
+    private static List<int> PaginasReales(PdfDocument doc)
+    {
+        var reales = Enumerable.Range(0, doc.PageCount).ToList();
+        while (reales.Count > 1 && EsPaginaFantasma(doc, reales[^1]))
+            reales.RemoveAt(reales.Count - 1);
+        return reales;
+    }
+
+    private static bool EsPaginaFantasma(PdfDocument doc, int page)
+    {
+        try
+        {
+            var size = doc.PageSizes[page];
+            if (size.Height / 72.0 * 25.4 < MinAltoPaginaMm) return true;
+
+            int pxW = System.Math.Max(1, (int)System.Math.Round(size.Width  / 72.0 * DpiRevision));
+            int pxH = System.Math.Max(1, (int)System.Math.Round(size.Height / 72.0 * DpiRevision));
+            using Image img = doc.Render(page, pxW, pxH, DpiRevision, DpiRevision, PdfRenderFlags.ForPrinting);
+            using Bitmap bw = ToBlackWhite(img, BwThreshold); // mismo umbral que la impresión: "tinta" = lo que saldría negro
+
+            var data = bw.LockBits(new Rectangle(0, 0, bw.Width, bw.Height), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            int primera = -1, ultima = -1;
+            try
+            {
+                var buf = new byte[data.Stride * bw.Height];
+                Marshal.Copy(data.Scan0, buf, 0, buf.Length);
+                for (int y = 0; y < bw.Height; y++)
+                {
+                    int row = y * data.Stride;
+                    for (int x = 0; x < bw.Width; x++)
+                        if (buf[row + x * 3] == 0) { if (primera < 0) primera = y; ultima = y; break; }
+                }
+            }
+            finally { bw.UnlockBits(data); }
+
+            if (primera < 0) return true; // página en blanco
+            double tintaMm = (ultima - primera + 1) / (double)DpiRevision * 25.4;
+            return tintaMm < MinAltoPaginaMm;
+        }
+        catch
+        {
+            return false; // ante la duda se imprime (mejor papel de más que un ticket incompleto)
+        }
     }
 
     /// <summary>Convierte a blanco/negro puro (umbral de luminancia) para que la térmica imprima

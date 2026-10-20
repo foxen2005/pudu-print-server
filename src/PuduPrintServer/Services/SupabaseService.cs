@@ -28,8 +28,12 @@ public class SupabaseService
         // No se hace join con zonas_produccion: impresora_ip/impresora_puerto
         // ya vienen copiados en cola_impresion por POS Matic al encolar.
         // Se agrega zona_nombre opcionalmente via zonas_produccion(nombre) solo para el log.
+        // 1.0.6: + tipo_comanda, secuencia (bug 3 del plan 2026-10-20: el rótulo ADICIONAL /
+        // REIMPRESIÓN / ANULAR se perdía cuando la comanda llegaba por la cola). El ✓ por ítem
+        // (ya_enviado) viaja dentro de `items`, no necesita columna.
         var url = $"{BaseUrl}/rest/v1/cola_impresion" +
                   $"?select=id,zona_id,estado,items,mesa_numero,garzon_nombre,pedido_id,comensales,notas" +
+                  $",tipo_comanda,secuencia" +
                   $",impresora_ip,impresora_puerto,zonas_produccion(nombre)" +
                   $"&estado=eq.pendiente&user_id=eq.{uid}&limit=10&order=created_at.asc";
         using var http = NewClient();

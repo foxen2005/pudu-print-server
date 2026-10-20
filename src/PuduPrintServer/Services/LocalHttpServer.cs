@@ -3,6 +3,7 @@ using System.Net;
 using System.Printing;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PuduPrintServer.Models;
 
 namespace PuduPrintServer.Services;
@@ -11,7 +12,7 @@ namespace PuduPrintServer.Services;
 /// Servidor HTTP local (loopback) que recibe tickets de caja del POS y los imprime.
 ///
 /// El POS (pudusystem.com, HTTPS) corre en la MISMA PC y hace:
-///   GET  http://127.0.0.1:{puerto}/health      → ¿agente vivo?
+///   GET  http://127.0.0.1:{puerto}/health      → ¿agente vivo? (1.0.6: incluye "version")
 ///   GET  http://127.0.0.1:{puerto}/impresoras  → lista de impresoras de Windows
 ///   POST http://127.0.0.1:{puerto}/imprimir    → { pdfBase64, impresora? } → imprime y responde ok/error
 ///   POST http://127.0.0.1:{puerto}/cajon       → abre el cajón monedero
@@ -43,6 +44,10 @@ public class LocalHttpServer
 
     public int  Port      { get; private set; }
     public bool IsRunning { get; private set; }
+
+    /// <summary>Versión de la assembly ("1.0.6"), la misma que muestra la ventana. Se informa en /health (1.0.6).</summary>
+    private static readonly string Version =
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "desconocida";
 
     public void Start()
     {
@@ -100,7 +105,8 @@ public class LocalHttpServer
             // /health es inofensivo y sirve de detección → abierto.
             if (req.HttpMethod == "GET" && path == "/health")
             {
-                await WriteJson(res, 200, new { ok = true, servicio = "pudu-print-server", puerto = Port });
+                // 1.0.6: + version, para que el POS sepa qué formato/funciones acepta el agente.
+                await WriteJson(res, 200, new { ok = true, servicio = "pudu-print-server", puerto = Port, version = Version });
                 return;
             }
 
@@ -183,6 +189,18 @@ public class LocalHttpServer
 
         await _pdf.PrintPdfAsync(pdf, impresora);
 
+        // 1.0.6 (bug 10 del plan 2026-10-20): el PDF va por GDI y el corte quedaba a criterio del
+        // driver (muchos no cortan, o cortan después de un largo de página fijo). Después del
+        // trabajo GDI se manda un trabajo RAW aparte con GS V 66 0 (avanza hasta la cuchilla y
+        // corta). El spooler los procesa en orden, así que el corte sale después del ticket.
+        // Se apaga con config `cortar_despues_pdf` = false/0 si el driver ya corta (doble corte).
+        // Best-effort: el ticket ya salió, un corte fallido no falla la venta.
+        if (CortarDespuesPdf())
+        {
+            try { RawPrinterHelper.SendBytes(impresora, EscPos.CutFeed()); }
+            catch (Exception ex) { _log.Error("local", "No se pudo cortar el papel después del PDF", ex); }
+        }
+
         // Cajón monedero: imprimir el PDF no envía el pulso de apertura, así que lo mandamos
         // aparte por RAW a la misma impresora (best-effort, no falla la venta).
         if (payload.AbrirCajon)
@@ -232,6 +250,10 @@ public class LocalHttpServer
             ImpresoraIp     = payload.ImpresoraIp,
             ImpresoraPuerto = payload.ImpresoraPuerto,
             Estado          = "local",
+            // 1.0.6: rótulo ADICIONAL / REIMPRESIÓN / ANULAR (camelCase o snake_case).
+            TipoComanda     = payload.TipoComanda ?? payload.TipoComandaSnake,
+            Secuencia       = payload.Secuencia,
+            ZonaBase        = payload.ZonaBase,
         };
 
         Task impresion;
@@ -281,6 +303,15 @@ public class LocalHttpServer
         {
             lock (_comandasEnCurso) _comandasEnCurso.Remove(job.Id);
         }
+    }
+
+    /// <summary>
+    /// config.cortar_despues_pdf (1.0.6): default true; "false", "0", "no" lo apagan.
+    /// </summary>
+    private bool CortarDespuesPdf()
+    {
+        var v = _db.GetConfig("cortar_despues_pdf")?.Trim().ToLowerInvariant();
+        return v is not ("false" or "0" or "no");
     }
 
     /// <summary>Abre el cajón monedero on-demand (botón manual en el POS) enviando el pulso RAW.</summary>
@@ -380,8 +411,17 @@ public class LocalHttpServer
         public string?      PedidoId        { get; set; }
         public int?         Comensales      { get; set; }
         public string?      Notas           { get; set; }
-        public JsonElement? Items           { get; set; } // CartItem[] tal cual va a cola_impresion
+        public JsonElement? Items           { get; set; } // CartItem[] tal cual va a cola_impresion (1.0.6: cada ítem puede traer ya_enviado)
         public string?      ImpresoraIp     { get; set; }
         public int?         ImpresoraPuerto { get; set; }
+
+        // 1.0.6 — rótulo de la comanda v2. El POS manda camelCase ("tipoComanda"); se acepta también
+        // snake_case ("tipo_comanda"), igual que la fila de cola_impresion. Si no vienen (POS viejo),
+        // PrintFormatter deduce el rótulo del sufijo de zonaNombre o imprime como comanda normal.
+        public string?      TipoComanda     { get; set; } // comanda | adicional | reimpresion | anulacion | marcado
+        public int?         Secuencia       { get; set; } // N° de envío POR ZONA → "+ ADICIONAL #n" (solo con tipo adicional)
+        public string?      ZonaBase        { get; set; } // nombre limpio ("Cocina"); zonaNombre trae el rótulo viejo pegado
+        [JsonPropertyName("tipo_comanda")]
+        public string?      TipoComandaSnake { get; set; }
     }
 }
