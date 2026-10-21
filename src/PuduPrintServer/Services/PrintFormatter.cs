@@ -48,8 +48,9 @@ public class PrintFormatter
     public byte[] FormatComanda(ColaImpresionJob job, int anchoColumnas = AnchoPorDefecto)
     {
         // Topes de sanidad: menos de 24 columnas no entra ni "Fecha/hora", más de 64 no existe en térmicas.
-        // 1.0.6 (code review): ÚNICA validación de ancho_columnas (PrintQueueProcessor solo parsea).
-        int w = Math.Clamp(anchoColumnas, 24, 64);
+        // 1.0.6: ÚNICA validación de ancho_columnas (PrintQueueProcessor solo parsea).
+        // Revisión final: fuera de rango → 48 (como antes de la 1.0.6), no se fuerza a 24/64.
+        int w = anchoColumnas is >= 24 and <= 64 ? anchoColumnas : AnchoPorDefecto;
         var ahora = DateTime.Now;
 
         // ── Zona, tipo y secuencia ────────────────────────────────────────────────────────────
@@ -112,7 +113,9 @@ public class PrintFormatter
         p.Add(EscPos.SizeNormal());
 
         // ── Zona con letras espaciadas: "─ C O C I N A ─" ──────────────────────────────────────
-        foreach (var linea in LineaZona(zona.ToUpperInvariant(), w))
+        // Revisión final: Imprimible DESPUÉS de pasar a mayúsculas (µ→Μ, ÿ→Ÿ salen de CP850 al
+        // subirlas; sin re-normalizar, el ancho calculado no coincidiría con lo impreso).
+        foreach (var linea in LineaZona(EscPos.Imprimible(zona.ToUpperInvariant()), w))
             p.Add(EscPos.Line(linea));
         p.Add(EscPos.BoldOff());
 
@@ -164,7 +167,7 @@ public class PrintFormatter
         if (!string.IsNullOrWhiteSpace(job.MesaNumero))
         {
             int wGrande = w / 2;
-            var mesa = EscPos.Imprimible(job.MesaNumero).Trim().ToUpperInvariant();
+            var mesa = EscPos.Imprimible(job.MesaNumero.Trim().ToUpperInvariant()); // revisión final: normalizar tras ToUpper
             p.Add(EscPos.BoldOn());
             p.Add(EscPos.Size(dobleAncho: true, dobleAlto: true));
             if ("MESA".Length + 1 + mesa.Length <= wGrande)
@@ -224,9 +227,9 @@ public class PrintFormatter
         p.Add(EscPos.Left());
 
         // 1.0.6: antes Feed(4) + GS V 65 3 (4 renglones fijos + distancia a la cuchilla ≈ 2 cm en
-        // blanco). GS V 65 0 (corte completo, función B) avanza solo hasta la cuchilla y corta.
-        // Code review: se quitó el Feed(1) previo; el avance hasta la cuchilla ya lo hace el comando.
-        p.Add(EscPos.CutFeed());
+        // blanco). Revisión final: se mantiene GS V 65 3 (el corte probado de la 1.0.5, avanza solo
+        // hasta la cuchilla) pero SIN ningún feed previo → el ahorro de papel viene de quitar Feed(4).
+        p.Add(EscPos.Cut());
 
         return EscPos.Concat(p.ToArray());
     }
@@ -249,7 +252,8 @@ public class PrintFormatter
         // Con √ se reservan 2 columnas al final (" √") para que el check quede siempre en el borde.
         int anchoNombre = Math.Max(8, w - sangria - (check ? 2 : 0));
 
-        var lineasNombre = Wrap(item.Nombre.ToUpperInvariant(), anchoNombre).ToList();
+        // Revisión final: normalizar a CP850 DESPUÉS de ToUpperInvariant (ver zona).
+        var lineasNombre = Wrap(EscPos.Imprimible(item.Nombre.ToUpperInvariant()), anchoNombre).ToList();
         if (lineasNombre.Count == 0) lineasNombre.Add("");
 
         // Primera línea: cantidad en doble alto (doble alto NO cambia el ancho de columna, así la

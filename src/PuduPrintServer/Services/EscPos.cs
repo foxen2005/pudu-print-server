@@ -21,6 +21,13 @@ public static class EscPos
     public static byte[] BoldOff()    => [0x1B, 0x45, 0x00];
     public static byte[] Center()     => [0x1B, 0x61, 0x01];
     public static byte[] Left()       => [0x1B, 0x61, 0x00];
+    /// <summary>
+    /// GS V 65 3 — corte completo "función B": avanza hasta la cuchilla (+3 unidades) y corta.
+    /// 1.0.6 (revisión final): es el MISMO comando que la 1.0.5 ya usaba en los locales (probado en
+    /// sus impresoras), ahora SIN el Feed(4) previo, que era el que gastaba ~2 cm de papel por
+    /// comanda. Se descartó GS V 65 0 / 66 0: algunos clones interpretan n=0 como "cortar sin
+    /// avanzar" y cortan las últimas líneas. También lo usa el corte RAW después de un PDF.
+    /// </summary>
     public static byte[] Cut()        => [0x1D, 0x56, 0x41, 0x03];
     public static byte[] Feed(int n = 1) => Enumerable.Repeat((byte)0x0A, n).ToArray();
     public static byte[] Text(string s)  => Cp850.GetBytes(s);
@@ -41,13 +48,23 @@ public static class EscPos
     public static string Imprimible(string? s)
     {
         if (string.IsNullOrEmpty(s)) return "";
-        var nfc = s.Normalize(NormalizationForm.FormC).Replace('\t', ' ');
-        // El encoder de CP850 reemplaza CADA mitad de un surrogate por "?" ("🎂" → "??"): se colapsa
-        // primero cada carácter fuera del plano básico (emoji) a un solo "?".
-        var sb = new StringBuilder(nfc.Length);
-        foreach (var r in nfc.EnumerateRunes())
-            sb.Append(r.IsBmp ? (char)r.Value : '?');
-        return Cp850.GetString(Cp850.GetBytes(sb.ToString()));
+        // 1.0.6 (revisión final): primero se sanean los surrogates, ANTES de Normalize, porque
+        // string.Normalize LANZA con un surrogate suelto (texto mal cortado en el POS) y eso tiraba
+        // la comanda entera. Par válido (emoji, fuera del plano básico) → un solo "?" (el encoder de
+        // CP850 pondría "??", uno por mitad); surrogate sin pareja → "?". Tab → espacio.
+        var sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            { sb.Append('?'); i++; }
+            else if (char.IsSurrogate(c))
+                sb.Append('?');
+            else
+                sb.Append(c == '\t' ? ' ' : c);
+        }
+        var nfc = sb.ToString().Normalize(NormalizationForm.FormC);
+        return Cp850.GetString(Cp850.GetBytes(nfc));
     }
 
     /// <summary>
@@ -74,15 +91,6 @@ public static class EscPos
     /// <see cref="Initialize"/>.
     /// </summary>
     public static byte[] Check() => [0x1B, 0x74, 0x00, 0xFB, 0x1B, 0x74, 0x02];
-
-    /// <summary>
-    /// GS V 65 0 — corte COMPLETO "función B" (1.0.6, code review: antes de la revisión era
-    /// GS V 66 0, que es corte PARCIAL). La impresora AVANZA SOLA el papel hasta que la posición de
-    /// impresión actual llega a la cuchilla (n = 0 → sin avance extra) y corta. Reemplaza en la
-    /// comanda a Feed(4) + GS V 65 3, que avanzaba 4 renglones fijos más la distancia
-    /// cabezal→cuchilla → ~2 cm de papel en blanco por comanda. No necesita feed previo.
-    /// </summary>
-    public static byte[] CutFeed() => [0x1D, 0x56, 0x41, 0x00];
 
     public static byte[] Concat(params byte[][] parts) =>
         parts.SelectMany(p => p).ToArray();

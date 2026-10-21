@@ -166,8 +166,8 @@ public class PrintQueueProcessor
             }
 
             // 1.0.6: ancho de papel configurable (config.ancho_columnas): 48 = 80 mm (default), 32 = 58 mm.
-            // Code review: acá solo se parsea; el rango 24–64 se valida en un único lugar
-            // (Math.Clamp en PrintFormatter.FormatComanda). Se quitó la lectura de negocio_nombre
+            // Acá solo se parsea (no numérico → 48); el rango 24–64 (fuera → 48) se valida en un
+            // único lugar: PrintFormatter.FormatComanda. Se quitó la lectura de negocio_nombre
             // (el diseño nuevo no lo imprime).
             var ancho = int.TryParse(_db.GetConfig("ancho_columnas"), out var a) ? a : PrintFormatter.AnchoPorDefecto;
             var bytes = _formatter.FormatComanda(job, ancho);

@@ -106,22 +106,24 @@ public class PdfPrinterService
     // Code review: era 2 mm y podía tirar contenido real (una línea de pie corta en la página 2);
     // con 1 mm solo cae lo que html2pdf deja por redondeo (1-2 px de un borde o de una letra).
     private const double MinAltoPaginaMm = 1.0;
-    // DPI de la revisión de contenido: a 203 dpi (el de la térmica), 1 mm ≈ 8 px → medición fiable.
-    private const int DpiRevision = 203;
+    // DPI de la revisión de contenido. Revisión final: 150 dpi (1 mm ≈ 6 px, suficiente) en vez de
+    // 203 para bajar la memoria del render en tickets largos.
+    private const int DpiRevision = 150;
 
     /// <summary>
-    /// Índices de las páginas a imprimir (1.0.6). Code review: se revisa y omite SOLO la ÚLTIMA
-    /// página (nunca la primera, ni varias en cadena) si es fantasma: o la página mide menos de 1 mm
-    /// de alto, o —como html2pdf repite el mismo formato en todas las páginas— su contenido (filas
-    /// con tinta) mide menos de 1 mm. Cuando la omite deja una línea Info en el log.
+    /// Índices de las páginas a imprimir (1.0.6). Revisión final: se omiten TODAS las páginas
+    /// finales vacías consecutivas (desde la última hacia atrás, nunca la primera) si son fantasma:
+    /// o la página mide menos de 1 mm de alto, o —como html2pdf repite el mismo formato en todas las
+    /// páginas— su contenido (filas con tinta) mide menos de 1 mm. Cada omisión deja un Info en el log.
     /// </summary>
     private static List<int> PaginasReales(PdfDocument doc)
     {
-        var reales = Enumerable.Range(0, doc.PageCount).ToList();
-        if (reales.Count > 1 && EsPaginaFantasma(doc, reales[^1]))
+        int total = doc.PageCount;
+        var reales = Enumerable.Range(0, total).ToList();
+        while (reales.Count > 1 && EsPaginaFantasma(doc, reales[^1]))
         {
             LogService.Instance.Info("local",
-                $"PDF: se omite la página {reales.Count} de {reales.Count} (vacía, < {MinAltoPaginaMm} mm de contenido)");
+                $"PDF: se omite la página {reales.Count} de {total} (vacía, < {MinAltoPaginaMm} mm de contenido)");
             reales.RemoveAt(reales.Count - 1);
         }
         return reales;
