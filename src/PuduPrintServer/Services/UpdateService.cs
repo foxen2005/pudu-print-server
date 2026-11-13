@@ -111,6 +111,8 @@ public class UpdateService
                 Application.Current.Windows.OfType<Views.MainWindow>().Any(w => w.IsVisible)) ?? false;
         }
         catch { /* sin dispatcher: se trata como oculta */ }
+        // 1.0.11: además del argumento, una marca en la config — no depender de que el reinicio de Velopack lo pase.
+        if (!ventanaVisible) DatabaseService.Instance.SetConfig("reinicio_oculto", "1");
         _mgr.ApplyUpdatesAndRestart(_updateListo.TargetFullRelease,
             ventanaVisible ? [] : [AutoArranque.ArgOculto]);
     }

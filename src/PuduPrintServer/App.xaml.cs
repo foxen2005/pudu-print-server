@@ -98,7 +98,10 @@ public partial class App : Application
 
         // 1.0.7: arranca con Windows (HKCU Run) y en ese arranque queda solo en la bandeja.
         AutoArranque.Asegurar();
-        if (e.Args.Contains(AutoArranque.ArgOculto))
+        // 1.0.11: tras una actualización automática con el agente en la bandeja, vuelve a la bandeja.
+        bool reinicioOculto = DatabaseService.Instance.GetConfig("reinicio_oculto") == "1";
+        if (reinicioOculto) DatabaseService.Instance.DeleteConfig("reinicio_oculto");
+        if (e.Args.Contains(AutoArranque.ArgOculto) || reinicioOculto)
         {
             log.Info("app", "Inicio con Windows: el agente queda en la bandeja (doble clic en el ícono para abrirlo)");
             return;
