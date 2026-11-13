@@ -83,7 +83,12 @@ public class UpdateService
             UpdateReady?.Invoke(version);
             _aplicar ??= new Timer(_ => AplicarSiInactivo(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         }
-        catch { /* sin red o sin release — silencioso, se reintenta en 4 h */ }
+        catch (Exception ex)
+        {
+            // 1.0.10: antes era silencioso y así pasó inadvertido que el repo privado devolvía 404 (ningún agente
+            // se actualizaba). Se reintenta en 4 h.
+            LogService.Instance.Warn("update", $"No se pudo buscar o descargar la actualización: {ex.Message}");
+        }
         finally { Interlocked.Exchange(ref _revisando, 0); }
     }
 
