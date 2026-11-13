@@ -16,3 +16,7 @@ Thumbs.db
 publish/
 publish-test/
 velopack-releases/
+
+# builds de prueba locales y logs del agente
+tmp-build*/
+logs/
