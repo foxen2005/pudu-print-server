@@ -148,6 +148,23 @@ public class PrintQueueProcessor
     /// zona en SQLite → spooler/COM). NO toca Supabase: la usan tanto el poll de la cola como el
     /// endpoint local POST /comanda. Lanza si falla; siempre dispara JobReceiving/JobCompleted.
     /// </summary>
+    /// <summary>
+    /// 1.0.7: impresora de caja para el respaldo de comandas: la última que usó POS Matic (lo que de verdad imprime
+    /// tickets) o la configurada en el agente, solo si es una térmica conocida por el agente (red del asistente o
+    /// cola sin driver gráfico) y sigue existiendo — no se mandan bytes ESC/POS a una láser o a "Print to PDF".
+    /// </summary>
+    private string? ImpresoraCajaTermica()
+    {
+        foreach (var nombre in new[] { _db.GetConfig("ultima_impresora_ticket"), _db.GetConfig("impresora_ticket") })
+        {
+            if (string.IsNullOrWhiteSpace(nombre)) continue;
+            if (!ImpresorasAgente.UsaRaster(nombre)) continue;
+            if (ImpresorasAgente.Red(nombre) is null && ImpresorasAgente.DriverDe(nombre) is null) continue; // ya no existe
+            return nombre;
+        }
+        return null;
+    }
+
     public async Task ImprimirComandaAsync(ColaImpresionJob job, string origen)
     {
         JobReceiving?.Invoke(job.ZonaId);
@@ -183,15 +200,18 @@ public class PrintQueueProcessor
             {
                 var imp = _db.GetImpresoras()
                              .FirstOrDefault(i => i.ZonaId == job.ZonaId && i.Activa);
+                // Zona configurada pero apagada a propósito (Activa=false): no se usa el respaldo.
+                bool zonaDesactivada = imp == null && _db.GetImpresoras().Any(i => i.ZonaId == job.ZonaId);
                 if (imp == null)
                 {
                     // 1.0.7 (pedido de Jean): prioridad a la impresora de la zona; si la zona no tiene, la comanda sale
-                    // por la impresora de caja del agente (la configurada aquí o la última que mandó POS Matic) en vez
-                    // de fallar. Un local con una sola térmica no tiene que configurar zonas.
-                    var caja = _db.GetConfig("impresora_ticket");
-                    if (string.IsNullOrWhiteSpace(caja)) caja = _db.GetConfig("ultima_impresora_ticket");
-                    if (string.IsNullOrWhiteSpace(caja))
-                        throw new Exception($"Sin impresora configurada para zona {zona} (ni impresora de caja en el agente)");
+                    // por la impresora de caja del agente en vez de fallar (un local con una sola térmica no configura
+                    // zonas). Code review: SOLO para lo que manda el POS de esta misma PC (/comanda, origen "local").
+                    // En la cola de Supabase no: el poll no filtra por zona y tomaría comandas de zonas que imprime
+                    // otro PC (barra con su propia impresora).
+                    var caja = origen == "local" && !zonaDesactivada ? ImpresoraCajaTermica() : null;
+                    if (caja is null)
+                        throw new Exception($"Sin impresora configurada para zona {zona}");
                     _log.Warn(origen, $"Zona {zona} sin impresora: la comanda sale por la de caja '{caja}'");
                     await ImpresorasAgente.EnviarAsync(caja, bytes);
                 }

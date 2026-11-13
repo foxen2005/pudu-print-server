@@ -10,6 +10,10 @@ public static class RedReconexion
 {
     private static readonly SemaphoreSlim _lock = new(1, 1);
     private static Timer? _timer;
+    /// <summary>Code review: una impresora simplemente apagada reescaneaba la red en cada tick y en cada impresión.
+    /// Como mucho un escaneo cada 2 minutos por impresora.</summary>
+    private static readonly Dictionary<string, DateTime> _ultimoEscaneo = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan EntreEscaneos = TimeSpan.FromMinutes(2);
 
     public static void Iniciar()
     {
@@ -40,6 +44,9 @@ public static class RedReconexion
 
             if (string.IsNullOrEmpty(guardada.Mac))
                 throw new Exception($"No responde {guardada.Ip}:{guardada.Puerto} y no tiene MAC guardada para buscarla");
+            if (_ultimoEscaneo.TryGetValue(nombre, out var ultimo) && DateTime.UtcNow - ultimo < EntreEscaneos)
+                throw new Exception($"'{nombre}' no responde en {guardada.Ip} (apagada o desconectada)");
+            _ultimoEscaneo[nombre] = DateTime.UtcNow;
 
             LogService.Instance.Warn("red", $"'{nombre}' no responde en {guardada.Ip}; buscando su MAC {guardada.Mac}…");
             var nuevaIp = await DescubrirImpresoras.BuscarIpPorMacAsync(guardada.Mac);

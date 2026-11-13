@@ -82,7 +82,17 @@ public static class ImpresorasAgente
             await Task.Run(() => RawPrinterHelper.SendBytes(nombre, bytes));
             return;
         }
-        var actual = await RedReconexion.AsegurarAsync(nombre, red);
-        await new PrinterService().PrintIpAsync(bytes, actual.Ip, actual.Puerto);
+        // Code review: un ticket (/imprimir) y una comanda (respaldo de zona) a la misma térmica de red abrían dos
+        // conexiones 9100 a la vez y la impresora mezclaba o perdía uno. Un trabajo a la vez por impresora.
+        var sem = _porImpresora.GetOrAdd(nombre.ToLowerInvariant(), _ => new SemaphoreSlim(1, 1));
+        await sem.WaitAsync();
+        try
+        {
+            var actual = await RedReconexion.AsegurarAsync(nombre, red);
+            await new PrinterService().PrintIpAsync(bytes, actual.Ip, actual.Puerto);
+        }
+        finally { sem.Release(); }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _porImpresora = new();
 }
