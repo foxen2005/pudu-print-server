@@ -1,6 +1,6 @@
 # Impresoras térmicas genéricas sin driver (red, USB y Bluetooth) — plan 2026-11-13
 
-> Estado: **PLAN (sin implementar)**. Pedido de Jean: "nuestro pudu print server no añade impresoras no
+> Estado: **✅ LISTO 2026-11-13** — publicado como 1.0.7 y 1.0.8 en GitHub (ver §8). Pedido de Jean: "nuestro pudu print server no añade impresoras no
 > instaladas, debemos mejorar eso, que instale también estas impresoras genéricas por red, usb y bluetooth,
 > que incluya algunos drivers".
 
@@ -119,3 +119,17 @@ Setting Tool). Se pueden ofrecer como "Instalar driver del fabricante" desde el 
 8. **Cajón sin cajón**: probar con multímetro (pulso ~24 V en pines 2-4 del RJ11/RJ12 al mandar ESC p), con un
    probador RJ11 + LED de 24 V, o con la prueba de cajón de `Printer.exe` del fabricante. El estado DLE EOT 1 solo
    confirma que el comando llegó, no que salió el pulso.
+
+## 8. ✅ LISTO — 2026-11-13
+
+Publicado: **1.0.7** (asistente red/USB/Bluetooth, ticket raster sin driver, reconexión por MAC, driver POS-80
+incluido, zonas sin impresora → impresora de caja, inicio con Windows, actualización automática cada 4 h) y
+**1.0.8** (web al pie de la comanda de zona). Commits: af32b8b, 523f73e, b42b810 (plan), 0b015eb, 8e02991, f745b96,
+240c191, 63a597d (code review high de comandas), 096cac2, b1709fa.
+
+Probado en el PC de Jean con la térmica 192.168.1.18 (PRT-8080, MAC 02-50-74-61-3F-64): boleta PDF, QR, cierre de
+caja, cajón (F2), comandas de cocina y barra por la de caja, reconexión con IP falsa (.250 → .18 en 3 s).
+
+Pendiente: probar USB y Bluetooth con una impresora real; instalar el driver POS-80 desde el asistente en un PC
+limpio (aquí ya estaba por el instalador del fabricante); instalarlo en el restaurante piloto (una sola térmica en
+el mostrador, comandas por la de caja) fuera del horario de servicio.
