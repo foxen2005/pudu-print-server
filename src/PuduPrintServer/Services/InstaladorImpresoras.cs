@@ -29,9 +29,13 @@ public static class InstaladorImpresoras
         };
         string Q(string s) => "'" + s.Replace("'", "''") + "'";
 
+        // Driver: el POS-80 que viene con el agente (una vez, con UAC) para que la cola funcione en cualquier programa;
+        // si no se puede, "Generic / Text Only". El ticket del agente sale como imagen ESC/POS con cualquiera de los dos.
+        var driver = await DriverPos80.InstalarElevadoAsync() ? DriverPos80.Nombre : ImpresorasAgente.DriverGenerico;
+
         var script = $$"""
             $ErrorActionPreference = 'Stop'
-            $drv = {{Q(ImpresorasAgente.DriverGenerico)}}
+            $drv = {{Q(driver)}}
             if (-not (Get-PrinterDriver -Name $drv -ErrorAction SilentlyContinue)) { Add-PrinterDriver -Name $drv }
             $port = {{Q(puerto)}}
             {{(p.Tipo == Tipo.Red
@@ -56,7 +60,7 @@ public static class InstaladorImpresoras
         if (p.Tipo == Tipo.Red)
             ImpresorasAgente.GuardarRed(nombre, new ImpresorasAgente.ImpresoraRed(p.Destino, p.Puerto, p.Mac));
 
-        LogService.Instance.Info("asistente", $"Impresora '{nombre}' instalada en {puerto} (sin driver, raster {p.AnchoPuntos} puntos)");
+        LogService.Instance.Info("asistente", $"Impresora '{nombre}' instalada en {puerto} (driver {driver}, ticket raster {p.AnchoPuntos} puntos)");
         return (true, $"'{nombre}' quedó instalada en Windows.");
     }
 

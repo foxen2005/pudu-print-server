@@ -23,6 +23,12 @@ public partial class App : Application
         // Habilitar code pages heredadas (CP850) para ESC/POS en .NET 8
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         VelopackApp.Build().Run();
+        // 1.0.7: proceso elevado que solo instala el driver POS-80 (lo lanza el asistente) y sale.
+        if (Environment.GetCommandLineArgs().Contains(DriverPos80.ArgInstalar))
+        {
+            Environment.ExitCode = DriverPos80.InstalarAqui();
+            return;
+        }
         _mutex = new Mutex(true, "PuduPrintServer.SingleInstance", out bool isNew);
         if (!isNew)
         {
@@ -89,6 +95,14 @@ public partial class App : Application
         // Arrancar procesador
         PrintQueueProcessor.Instance.Start();
         _ = UpdateService.Instance.CheckAndDownloadAsync();
+
+        // 1.0.7: arranca con Windows (HKCU Run) y en ese arranque queda solo en la bandeja.
+        AutoArranque.Asegurar();
+        if (e.Args.Contains(AutoArranque.ArgOculto))
+        {
+            log.Info("app", "Inicio con Windows: el agente queda en la bandeja (doble clic en el ícono para abrirlo)");
+            return;
+        }
 
         // Abrir ventana principal
         new MainWindow().Show();

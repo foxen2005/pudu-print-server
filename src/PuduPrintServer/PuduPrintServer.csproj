@@ -16,6 +16,10 @@
   <ItemGroup>
     <Resource Include="Assets\pudu-logo.ico" />
   </ItemGroup>
+  <!-- 1.0.7: driver POS-80 (Unidrv + GPD) que instala el asistente — ver Services/DriverPos80.cs -->
+  <ItemGroup>
+    <Content Include="Drivers\POS80\*.*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
