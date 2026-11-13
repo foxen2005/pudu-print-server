@@ -184,8 +184,18 @@ public class PrintQueueProcessor
                 var imp = _db.GetImpresoras()
                              .FirstOrDefault(i => i.ZonaId == job.ZonaId && i.Activa);
                 if (imp == null)
-                    throw new Exception($"Sin impresora configurada para zona {zona}");
-                if (imp.TipoConexion == "WIN")
+                {
+                    // 1.0.7 (pedido de Jean): prioridad a la impresora de la zona; si la zona no tiene, la comanda sale
+                    // por la impresora de caja del agente (la configurada aquí o la última que mandó POS Matic) en vez
+                    // de fallar. Un local con una sola térmica no tiene que configurar zonas.
+                    var caja = _db.GetConfig("impresora_ticket");
+                    if (string.IsNullOrWhiteSpace(caja)) caja = _db.GetConfig("ultima_impresora_ticket");
+                    if (string.IsNullOrWhiteSpace(caja))
+                        throw new Exception($"Sin impresora configurada para zona {zona} (ni impresora de caja en el agente)");
+                    _log.Warn(origen, $"Zona {zona} sin impresora: la comanda sale por la de caja '{caja}'");
+                    await ImpresorasAgente.EnviarAsync(caja, bytes);
+                }
+                else if (imp.TipoConexion == "WIN")
                     // 1.0.7: una térmica de red del asistente va por TCP directo (con reconexión por MAC).
                     await ImpresorasAgente.EnviarAsync(imp.NombreImpresora, bytes);
                 else

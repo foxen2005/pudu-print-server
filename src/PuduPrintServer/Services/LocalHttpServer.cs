@@ -193,6 +193,10 @@ public class LocalHttpServer
         if (!ImpresoraExiste(impresora))
         { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
 
+        // 1.0.7: la impresora de caja que usa POS Matic es el respaldo de las comandas de zonas sin impresora.
+        if (!string.IsNullOrWhiteSpace(payload.Impresora) && _db.GetConfig("ultima_impresora_ticket") != impresora)
+            _db.SetConfig("ultima_impresora_ticket", impresora);
+
         byte[] pdf;
         try { pdf = Convert.FromBase64String(payload.PdfBase64); }
         catch { await WriteJson(res, 400, new { ok = false, error = "pdfBase64 no es base64 válido" }); return; }
