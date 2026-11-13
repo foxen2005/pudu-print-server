@@ -110,6 +110,13 @@ public partial class MainWindow : Window
         CargarTarjetas();
     }
 
+    // 1.0.7: asistente "Agregar impresora" (docs/plans/2026-11-13-impresoras-genericas-sin-driver.md)
+    private void BdrAgregarImpresora_Click(object sender, MouseButtonEventArgs e)
+    {
+        var dlg = new Dialogs.AgregarImpresoraDialog { Owner = this };
+        dlg.ShowDialog();
+    }
+
     private void BdrLogs_Click(object sender, MouseButtonEventArgs e)
     {
         try

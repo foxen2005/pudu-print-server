@@ -197,6 +197,21 @@ public class LocalHttpServer
         try { pdf = Convert.FromBase64String(payload.PdfBase64); }
         catch { await WriteJson(res, 400, new { ok = false, error = "pdfBase64 no es base64 válido" }); return; }
 
+        // 1.0.7 (docs/plans/2026-11-13-impresoras-genericas-sin-driver.md): térmica sin driver del fabricante (red del
+        // asistente o cola "Generic / Text Only") → el PDF va como imagen ESC/POS con el corte y el cajón en el MISMO
+        // trabajo (red: TCP directo con reconexión por MAC). Mismos píxeles que por driver.
+        if (ImpresorasAgente.UsaRaster(impresora))
+        {
+            var raster = PdfPrinterService.RenderRaster(pdf, ImpresorasAgente.AnchoPuntos(impresora));
+            var trabajo = EscPos.Concat(raster, EscPos.Feed(3),
+                CortarDespuesPdf() ? EscPos.Cut() : [],
+                payload.AbrirCajon ? CashDrawerCmd : []);
+            await ImpresorasAgente.EnviarAsync(impresora, trabajo);
+            _log.Info("local", $"Ticket impreso en '{impresora}' sin driver ({pdf.Length} bytes PDF → {trabajo.Length} bytes ESC/POS)");
+            await WriteJson(res, 200, new { ok = true });
+            return;
+        }
+
         await _pdf.PrintPdfAsync(pdf, impresora);
 
         // 1.0.6 (bug 10 del plan 2026-10-20): el PDF va por GDI y el corte quedaba a criterio del
@@ -343,7 +358,8 @@ public class LocalHttpServer
         if (!ImpresoraExiste(impresora))
         { await WriteJson(res, 400, new { ok = false, error = $"Impresora no encontrada en Windows: {impresora}" }); return; }
 
-        RawPrinterHelper.SendBytes(impresora, CashDrawerCmd);
+        // 1.0.7: por el camino de la impresora (red del asistente → TCP directo; si no, RAW por el spooler).
+        await ImpresorasAgente.EnviarAsync(impresora, CashDrawerCmd);
         _log.Info("local", $"Cajón abierto en '{impresora}'");
         await WriteJson(res, 200, new { ok = true });
     }

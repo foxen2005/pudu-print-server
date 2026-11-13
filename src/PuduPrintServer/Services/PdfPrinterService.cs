@@ -102,6 +102,45 @@ public class PdfPrinterService
         });
     }
 
+    /// <summary>
+    /// 1.0.7 (docs/plans/2026-11-13-impresoras-genericas-sin-driver.md): el mismo ticket como ESC/POS raster, para
+    /// impresoras SIN driver del fabricante (cola "Generic / Text Only" en RAW, red 9100 o Bluetooth COM).
+    /// Mismo render que <see cref="PrintPdfAsync"/>: Pdfium dibuja la página directo al ancho en puntos de la
+    /// impresora (80 mm = 576, 58 mm = 384, 98 % centrado como en GDI) y se binariza con el mismo umbral. No se
+    /// escala después, así que la calidad es la misma que por driver.
+    /// </summary>
+    public static byte[] RenderRaster(byte[] pdf, int anchoPuntos)
+    {
+        if (pdf.Length == 0) throw new ArgumentException("PDF vacío.");
+        if (anchoPuntos < 200) anchoPuntos = 576;
+
+        using var stream = new MemoryStream(pdf);
+        using var doc = PdfDocument.Load(stream);
+        using var salida = new MemoryStream();
+        salida.Write(EscPos.Initialize());
+
+        foreach (int page in PaginasReales(doc))
+        {
+            var size = doc.PageSizes[page];
+            int pxW = (int)System.Math.Round(anchoPuntos * 0.98);
+            int pxH = System.Math.Max(1, (int)System.Math.Round(pxW * size.Height / size.Width));
+            // DPI equivalente para que Pdfium no re-escale: puntos / pulgadas de la página.
+            int dpi = System.Math.Max(1, (int)System.Math.Round(pxW / (size.Width / 72.0)));
+
+            using Image rendered = doc.Render(page, pxW, pxH, dpi, dpi, PdfRenderFlags.ForPrinting);
+            using Bitmap bw = ToBlackWhite(rendered, BwThreshold);
+            // Centrado: lienzo del ancho exacto de la impresora con el ticket al medio.
+            using var lienzo = new Bitmap(anchoPuntos, pxH, PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(lienzo))
+            {
+                g.Clear(Color.White);
+                g.DrawImage(bw, new Rectangle((anchoPuntos - pxW) / 2, 0, pxW, pxH), 0, 0, pxW, pxH, GraphicsUnit.Pixel);
+            }
+            salida.Write(EscPosRaster.Convertir(lienzo));
+        }
+        return salida.ToArray();
+    }
+
     // 1.0.6: una página final con menos de ~1 mm de alto (o de tinta) es la fantasma de html2pdf.
     // Code review: era 2 mm y podía tirar contenido real (una línea de pie corta en la página 2);
     // con 1 mm solo cae lo que html2pdf deja por redondeo (1-2 px de un borde o de una letra).

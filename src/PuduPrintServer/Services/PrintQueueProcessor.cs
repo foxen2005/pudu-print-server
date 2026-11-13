@@ -186,7 +186,8 @@ public class PrintQueueProcessor
                 if (imp == null)
                     throw new Exception($"Sin impresora configurada para zona {zona}");
                 if (imp.TipoConexion == "WIN")
-                    await _printer.PrintSpoolerAsync(bytes, imp.NombreImpresora);
+                    // 1.0.7: una térmica de red del asistente va por TCP directo (con reconexión por MAC).
+                    await ImpresorasAgente.EnviarAsync(imp.NombreImpresora, bytes);
                 else
                     await _printer.PrintComAsync(bytes, imp.PuertoCom);
             }

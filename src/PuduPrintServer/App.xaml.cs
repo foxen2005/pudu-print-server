@@ -66,6 +66,8 @@ public partial class App : Application
         {
             _httpServer = new LocalHttpServer();
             _httpServer.Start();
+            // 1.0.7: térmicas de red del asistente → reconexión por MAC si cambia la IP.
+            RedReconexion.Iniciar();
         }
         catch (Exception ex)
         {
