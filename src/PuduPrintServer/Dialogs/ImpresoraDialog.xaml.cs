@@ -15,8 +15,12 @@ public partial class ImpresoraDialog : Window
     public ImpresoraDialog()
     {
         InitializeComponent();
+        ChkRespaldoZonas.IsChecked = PrintQueueProcessor.RespaldoZonasActivo();
         CargarDatos();
     }
+
+    private void ChkRespaldoZonas_Changed(object sender, RoutedEventArgs e)
+        => DatabaseService.Instance.SetConfig("respaldo_zonas_caja", ChkRespaldoZonas.IsChecked == true ? "1" : "0");
 
     private async void CargarDatos()
     {

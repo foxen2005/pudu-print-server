@@ -142,6 +142,11 @@
 
         <!-- Cuenta / cerrar sesión + cerrar -->
         <StackPanel Grid.Row="3" Margin="0,16,0,0">
+            <!-- 1.0.9: respaldo de zonas sin impresora (Jean: "si no hay zonas asignadas, imprime en la impresora disponible") -->
+            <CheckBox x:Name="ChkRespaldoZonas" Foreground="#DDD" FontSize="12" Margin="0,0,0,12"
+                      Content="Imprimir comandas de zonas sin impresora en la impresora de caja"
+                      ToolTip="Apágalo solo si otro PC con el agente imprime esas zonas (local con varias cajas)."
+                      Checked="ChkRespaldoZonas_Changed" Unchecked="ChkRespaldoZonas_Changed"/>
             <Border Height="1" Background="#242424" Margin="0,0,0,12"/>
             <Grid>
                 <Grid.ColumnDefinitions>

@@ -153,6 +153,9 @@ public class PrintQueueProcessor
     /// tickets) o la configurada en el agente, solo si es una térmica conocida por el agente (red del asistente o
     /// cola sin driver gráfico) y sigue existiendo — no se mandan bytes ESC/POS a una láser o a "Print to PDF".
     /// </summary>
+    /// <summary>1.0.9: respaldo a la impresora de caja también para la cola (default sí; "0" lo apaga).</summary>
+    public static bool RespaldoZonasActivo() => DatabaseService.Instance.GetConfig("respaldo_zonas_caja") != "0";
+
     private string? ImpresoraCajaTermica()
     {
         foreach (var nombre in new[] { _db.GetConfig("ultima_impresora_ticket"), _db.GetConfig("impresora_ticket") })
@@ -207,10 +210,11 @@ public class PrintQueueProcessor
                 {
                     // 1.0.7 (pedido de Jean): prioridad a la impresora de la zona; si la zona no tiene, la comanda sale
                     // por la impresora de caja del agente en vez de fallar (un local con una sola térmica no configura
-                    // zonas). Code review: SOLO para lo que manda el POS de esta misma PC (/comanda, origen "local").
-                    // En la cola de Supabase no: el poll no filtra por zona y tomaría comandas de zonas que imprime
-                    // otro PC (barra con su propia impresora).
-                    var caja = origen == "local" && !zonaDesactivada ? ImpresoraCajaTermica() : null;
+                    // zonas). 1.0.9: también para la cola (meseros con teléfono en 5G, tablets), regla de Jean. El code
+                    // review advertía que el poll no filtra por zona y en un local con varios PCs con agente la caja
+                    // tomaría comandas de una zona que imprime otro PC → interruptor en ⚙ Config (config
+                    // respaldo_zonas_caja, activo por defecto); lo de esta misma PC (/comanda) siempre usa el respaldo.
+                    var caja = !zonaDesactivada && (origen == "local" || RespaldoZonasActivo()) ? ImpresoraCajaTermica() : null;
                     if (caja is null)
                         throw new Exception($"Sin impresora configurada para zona {zona}");
                     _log.Warn(origen, $"Zona {zona} sin impresora: la comanda sale por la de caja '{caja}'");
