@@ -103,6 +103,8 @@ public class LocalHttpServer
     {
         var req = ctx.Request;
         var res = ctx.Response;
+        // 1.0.7: imprimir / cajón / comanda cuentan como actividad (la actualización automática espera 2 min sin nada)
+        using var trabajo = req.HttpMethod == "POST" ? UpdateService.Trabajo() : null;
         AddCors(req, res);
 
         try

@@ -167,6 +167,7 @@ public class PrintQueueProcessor
 
     public async Task ImprimirComandaAsync(ColaImpresionJob job, string origen)
     {
+        using var trabajo = UpdateService.Trabajo(); // 1.0.7: no actualizar a mitad de una comanda
         JobReceiving?.Invoke(job.ZonaId);
         var zona = job.ZonaNombre ?? job.ZonaId[..Math.Min(8, job.ZonaId.Length)];
         var mesa = job.MesaNumero ?? "-";
