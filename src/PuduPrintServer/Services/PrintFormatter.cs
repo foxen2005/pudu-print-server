@@ -23,6 +23,7 @@ namespace PuduPrintServer.Services;
 ///      -> descripción
 ///   TOTAL ÍTEMS: n
 ///   Documento interno · solo producción
+///   www.pudutecnologia.cl                      (1.0.8)
 ///
 /// Ancho: 48 columnas (fuente A, 80 mm) por defecto; 32 para 58 mm (config `ancho_columnas`).
 /// </summary>
@@ -224,6 +225,10 @@ public class PrintFormatter
         p.Add(EscPos.Line(new string('-', w)));
         p.Add(EscPos.Center());
         p.Add(EscPos.Line(w >= 35 ? "Documento interno · solo producción" : "Doc. interno · solo producción"));
+        // 1.0.8 (Jean, 2026-11-13): la comanda de cocina/barra terminaba en "Documento interno" y cortaba; la vista
+        // previa de POS Matic (y todos los documentos, plan 2026-11-02 del pie) lleva además la web. Va antes del
+        // corte: GS V 65 avanza hasta la cuchilla, así que la línea no queda cortada.
+        p.Add(EscPos.Line("www.pudutecnologia.cl"));
         p.Add(EscPos.Left());
 
         // 1.0.6: antes Feed(4) + GS V 65 3 (4 renglones fijos + distancia a la cuchilla ≈ 2 cm en
