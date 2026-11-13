@@ -73,6 +73,24 @@ puerto `IP_192.168.1.18`.
 - Raster: comparar el ticket impreso con el PDF (TED legible por la app del SII).
 - Jean prueba el instalador local **antes** de publicar el release (Velopack).
 
+## 5b. Calidad: el camino actual YA imprime una imagen (aclaración 2026-11-13)
+
+Jean teme que convertir el PDF a imagen pierda calidad. Evidencia en el código actual:
+`PdfPrinterService.PrintPdfAsync` (L84-96) renderiza la página con Pdfium a la **resolución nativa de la
+impresora** (`e.Graphics.DpiX`, 203 dpi), la pasa a blanco y negro (`ToBlackWhite`, umbral 190) y la dibuja como
+bitmap por GDI. El driver solo transmite ese bitmap. El raster ESC/POS usa **el mismo render, los mismos píxeles**
+(576 puntos = 72 mm a 203 dpi): no pierde nada respecto de hoy. Una térmica no puede imprimir más fino que 8
+puntos/mm, con o sin driver. La pérdida de calidad aparece solo si se re-escala (renderizar a otra resolución y
+estirar); el plan lo prohíbe (render directo al ancho en puntos de la impresora, sin escalar).
+
+Lo único más nítido que una imagen es el **texto nativo de la impresora** (ESC/POS de texto, como las comandas):
+armar el ticket desde los datos de la venta con la fuente interna y solo el TED como imagen. Es un cambio mayor
+(un formateador de boleta en el agente, que hoy recibe un PDF): queda como fase 2 opcional.
+
+Drivers de Jean (`E:\DigitalFox\Pudu Tecnologia\drivers`): `POS-80-Setup.exe` y `POS-80-Series.exe` (instaladores
+del driver "POS-80 Series", formato propio, sin INF visible) + manual y herramientas de la PRT-8080 (LAN Port
+Setting Tool). Se pueden ofrecer como "Instalar driver del fabricante" desde el agente.
+
 ## 6. Preguntas para Jean
 1. ¿Incluimos drivers de fabricantes o basta con imprimir sin driver (raster) + Generic/Text Only de Windows?
 2. ¿"Instalar también en Windows" activado por defecto (pide UAC) o solo cuando el usuario lo marca?
