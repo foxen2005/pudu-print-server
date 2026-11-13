@@ -95,3 +95,27 @@ Setting Tool). Se pueden ofrecer como "Instalar driver del fabricante" desde el 
 1. ¿Incluimos drivers de fabricantes o basta con imprimir sin driver (raster) + Generic/Text Only de Windows?
 2. ¿"Instalar también en Windows" activado por defecto (pide UAC) o solo cuando el usuario lo marca?
 3. ¿Raster por defecto para impresoras nuevas y driver de Windows solo para las que ya existen?
+
+## 7. Decisiones de Jean (2026-11-13)
+
+1. **Imprimir sin driver por defecto** (raster ESC/POS, mismos píxeles que hoy). Problema que agrega: si se
+   apaga la red o el router, la impresora cambia de IP → **reconexión automática por MAC**: al agregarla se guarda
+   la MAC (ARP; la de Jean es `02-50-74-61-3f-64`); si `IP:9100` no responde, se reescanea la subred, se busca la
+   MAC, se actualiza la IP guardada (y el puerto TCP/IP de Windows si está instalada) y se reintenta. Sugerir en el
+   asistente fijar la IP (reserva DHCP del router o "LAN Port Setting Tool" del fabricante).
+2. **Asistente de instalación**: sí (red, USB, Bluetooth).
+3. **POS Matic**: el navegador no puede abrir TCP 9100 → el camino es POS → agente (127.0.0.1) → impresora, como
+   hoy. `/impresoras` incluye las del agente por nombre; POS Matic casi sin cambios.
+4. **Todo probado antes de publicar** (y en la misma tanda revisar los QR del modo Gourmet que salen mal: falta
+   foto/detalle de Jean).
+5. **Drivers dentro del instalador** (POS-80 Series de `E:\DigitalFox\Pudu Tecnologia\drivers`) para que el
+   asistente los instale sin problemas. Camino: instalarlo una vez en un PC de prueba, exportar el paquete del
+   DriverStore (`pnputil /export-driver`), incluir el paquete (INF + archivos) en el instalador y en el asistente
+   instalar con `pnputil /add-driver` + `Add-PrinterDriver` (sin interfaz del fabricante). Si el instalador no deja
+   exportar un INF, usar su modo silencioso si lo tiene.
+6. **Instalar también en Windows**: sí, por defecto (puerto TCP/IP + cola con el driver POS-80 o Generic/Text Only),
+   así el agente y cualquier programa la ven.
+7. Prueba del 2026-11-13: ESC/POS directo a `192.168.1.18:9100` imprimió y cortó (visto por cámara de seguridad).
+8. **Cajón sin cajón**: probar con multímetro (pulso ~24 V en pines 2-4 del RJ11/RJ12 al mandar ESC p), con un
+   probador RJ11 + LED de 24 V, o con la prueba de cajón de `Printer.exe` del fabricante. El estado DLE EOT 1 solo
+   confirma que el comando llegó, no que salió el pulso.
