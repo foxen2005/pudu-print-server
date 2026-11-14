@@ -293,14 +293,24 @@ Tablas de Supabase que usa:
 
 ```bash
 # 1. Compilar en Release
-dotnet publish src/PuduPrintServer/PuduPrintServer.csproj -c Release -r win-x64
+dotnet publish src/PuduPrintServer/PuduPrintServer.csproj -c Release -r win-x64 --self-contained -o publish/win-x64
 
-# 2. Empaquetar con Velopack
-vpk pack -u PuduPrintServer -v 1.0.0 -p ./publish/win-x64 -o ./velopack-releases
+# 2. Empaquetar con Velopack (X = versión, ej. 1.0.12)
+vpk pack -u PuduPrintServer -v X -p ./publish/win-x64 -o ./velopack-releases --icon src/PuduPrintServer/Assets/pudu-logo.ico
 
-# 3. Push de la release a GitHub
-gh release create v1.0.0 ./velopack-releases/* --title "v1.0.0"
+# 3. Release en GitHub (tag SIN "v"): full + delta nupkg, Setup.exe, Portable.zip, RELEASES,
+#    releases.win.json y assets.win.json de esa versión
+gh release create X <archivos de la versión X> --title "X"
+
+# 4. OBLIGATORIO: comprobar que la descarga pública entrega la versión nueva
+curl -sIL https://github.com/foxen2005/pudu-print-server/releases/latest/download/PuduPrintServer-win-Setup.exe | grep -i "^location"
+#    → debe redirigir a .../releases/download/X/...
 ```
+
+**La landing (pudutecnologia.cl, repo `pudulanding`) descarga desde ese mismo enlace `releases/latest`**
+(`src/components/home/ModulosDescarga.tsx`), así que toma sola cada release nueva. No volver a apuntarla a un
+archivo subido a Lovable: el del 11-sep-2026 nunca se actualizó y la landing entregó una versión vieja dos meses.
+Si el release queda como borrador o pre-release, `latest` NO lo toma y la landing sigue con la anterior.
 
 ---
 
